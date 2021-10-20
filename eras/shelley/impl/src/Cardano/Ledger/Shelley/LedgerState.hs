@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
@@ -28,6 +29,7 @@ module Cardano.Ledger.Shelley.LedgerState
   ( AccountState (..),
     DPState (..),
     DState (..),
+    emptyDState,
     EpochState (..),
     UpecState (..),
     PulsingRewUpdate (..),
@@ -42,6 +44,8 @@ module Cardano.Ledger.Shelley.LedgerState
     RewardUpdate (..),
     RewardSnapShot (..),
     UTxOState (..),
+    smartUTxOState,
+    IncrementalStake (..),
     depositPoolChange,
     emptyRewardUpdate,
     pvCanFollow,
@@ -69,6 +73,10 @@ module Cardano.Ledger.Shelley.LedgerState
 
     -- * Epoch boundary
     stakeDistr,
+    incrementalStakeDistr,
+    updateStakeDistribution,
+    resolveIncrementalPtrs,
+    aggregateUtxoCoinByCredential,
     applyRUpd,
     applyRUpd',
     createRUpd,
@@ -124,7 +132,7 @@ import Cardano.Ledger.Coin
 import Cardano.Ledger.Compactible
 import Cardano.Ledger.Core (PParamsDelta)
 import qualified Cardano.Ledger.Core as Core
-import Cardano.Ledger.Credential (Credential (..))
+import Cardano.Ledger.Credential (Credential (..), StakeReference (StakeRefBase, StakeRefPtr))
 import qualified Cardano.Ledger.Crypto as CC (Crypto)
 import Cardano.Ledger.Era (Crypto, Era)
 import Cardano.Ledger.Keys
@@ -159,7 +167,6 @@ import Cardano.Ledger.Shelley.EpochBoundary
   ( SnapShot (..),
     SnapShots (..),
     Stake (..),
-    aggregateUtxoCoinByCredential,
   )
 import Cardano.Ledger.Shelley.PParams
   ( PParams,
@@ -240,7 +247,7 @@ import Data.Coders
 import Data.Constraint (Constraint)
 import Data.Default.Class (Default, def)
 import Data.Foldable (fold, toList)
-import Data.Group (invert)
+import Data.Group (Group, invert)
 import Data.Kind (Type)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -534,11 +541,53 @@ pvCanFollow _ SNothing = True
 pvCanFollow (ProtVer m n) (SJust (ProtVer m' n')) =
   (m + 1, 0) == (m', n') || (m, n + 1) == (m', n')
 
+-- =============================
+
+-- | Incremental Stake, Stake along with possible missed coins from danging Ptrs
+data IncrementalStake crypto = IStake
+  { credMap :: !(Map (Credential 'Staking crypto) Coin),
+    ptrMap :: !(Map Ptr Coin)
+  }
+  deriving (Generic, Show, Eq, Ord, NoThunks, NFData)
+
+instance CC.Crypto crypto => ToCBOR (IncrementalStake crypto) where
+  toCBOR (IStake st dangle) =
+    encodeListLen 2 <> mapToCBOR st <> mapToCBOR dangle
+
+instance CC.Crypto crypto => FromCBOR (IncrementalStake crypto) where
+  fromCBOR = do
+    decodeRecordNamed "Stake" (const 2) $ do
+      stake <- mapFromCBOR
+      dangle <- mapFromCBOR
+      pure $ IStake stake dangle
+
+instance Semigroup (IncrementalStake c) where
+  (IStake a b) <> (IStake c d) = IStake (Map.unionWith (<>) a c) (Map.unionWith (<>) b d)
+
+instance Monoid (IncrementalStake c) where
+  mempty = (IStake Map.empty Map.empty)
+
+instance Data.Group.Group (IncrementalStake c) where
+  invert (IStake m1 m2) = IStake (Map.map invert m1) (Map.map invert m2)
+
+instance Default (IncrementalStake c) where
+  def = IStake Map.empty Map.empty
+
+-- =============================
+
+-- | There is a serious invariant that we must maintain in the UTxOState.
+--   Given (UTxOState utxo _ _ _ istake) it must be the case that
+--   istake == (updateStakeDistribution (IStake Map.empty Map.empty) (UTxO Map.empty) utxo)
+--   Of course computing the RHS of the above equality can be very expensive, so we only
+--   use this route in the testing function smartUTxO. But we are very carefull, wherever
+--   we update the UTxO, we carefully make INCREMENTAL changes to istake to maintain
+--   this invariant. This happens in the UTxO rule.
 data UTxOState era = UTxOState
   { _utxo :: !(UTxO era),
     _deposited :: !Coin,
     _fees :: !Coin,
-    _ppups :: !(State (Core.EraRule "PPUP" era))
+    _ppups :: !(State (Core.EraRule "PPUP" era)),
+    _stakeDistro :: !(IncrementalStake (Crypto era))
   }
   deriving (Generic)
 
@@ -568,8 +617,8 @@ deriving stock instance
 instance TransUTxOState NoThunks era => NoThunks (UTxOState era)
 
 instance TransUTxOState ToCBOR era => ToCBOR (UTxOState era) where
-  toCBOR (UTxOState ut dp fs us) =
-    encodeListLen 4 <> toCBOR ut <> toCBOR dp <> toCBOR fs <> toCBOR us
+  toCBOR (UTxOState ut dp fs us sd) =
+    encodeListLen 5 <> toCBOR ut <> toCBOR dp <> toCBOR fs <> toCBOR us <> toCBOR sd
 
 instance
   ( TransValue FromCBOR era,
@@ -582,6 +631,7 @@ instance
   fromCBOR =
     decode $
       RecD UTxOState
+        <! From
         <! From
         <! From
         <! From
@@ -714,6 +764,7 @@ genesisState genDelegs0 utxo0 =
         (Coin 0)
         (Coin 0)
         def
+        (IStake mempty Map.empty)
     )
     (DPState dState def)
   where
@@ -811,6 +862,8 @@ consumed pp u tx =
     refunds = keyRefunds pp tx
     withdrawals = fold . unWdrl $ getField @"wdrls" tx
 
+-- ====================================================
+
 newtype WitHashes crypto = WitHashes
   {unWitHashes :: Set (KeyHash 'Witness crypto)}
   deriving (Eq, Generic)
@@ -853,8 +906,7 @@ witsVKeyNeeded ::
     HasField "wdrls" (Core.TxBody era) (Wdrl (Crypto era)),
     HasField "certs" (Core.TxBody era) (StrictSeq (DCert (Crypto era))),
     HasField "inputs" (Core.TxBody era) (Set (TxIn (Crypto era))),
-    HasField "update" (Core.TxBody era) (StrictMaybe (Update era)),
-    HasField "address" (Core.TxOut era) (Addr (Crypto era))
+    HasField "update" (Core.TxBody era) (StrictMaybe (Update era))
   ) =>
   UTxO era ->
   tx ->
@@ -993,16 +1045,18 @@ reapRewards dStateRewards withdrawals =
 -- epoch boundary calculations --
 ---------------------------------
 
+-- | Compute the current Stake Distribution. This was called at the Epoch boundary in the Snap Rule.
+--   Now its is called in the tests to see that its incremental analog 'incrementaStakeDistr' agrees.
 stakeDistr ::
   forall era.
-  (Era era, HasField "address" (Core.TxOut era) (Addr (Crypto era))) =>
+  Era era =>
   UTxO era ->
   DState (Crypto era) ->
   PState (Crypto era) ->
   SnapShot (Crypto era)
 stakeDistr u ds ps =
   SnapShot
-    (Stake $ eval (dom activeDelegs ◁ stakeRelation))
+    (Stake (eval (dom activeDelegs ◁ stakeRelation)))
     delegs
     poolParams
   where
@@ -1012,6 +1066,143 @@ stakeDistr u ds ps =
     stakeRelation = aggregateUtxoCoinByCredential (forwards ptrs') u rewards'
     activeDelegs :: Map (Credential 'Staking (Crypto era)) (KeyHash 'StakePool (Crypto era))
     activeDelegs = eval ((dom rewards' ◁ delegs) ▷ dom poolParams)
+
+-- A TxOut has 4 different shapes, depending on the shape of it's embedded Addr.
+-- Credentials are stored in only 2 of the 4 cases.
+-- 1) TxOut (Addr _ _ (StakeRefBase cred)) coin   -> HERE
+-- 2) TxOut (Addr _ _ (StakeRefPtr ptr)) coin     -> HERE
+-- 3) TxOut (Addr _ _ StakeRefNull) coin          -> NOT HERE
+-- 4) TxOut (AddrBootstrap _) coin                -> NOT HERE
+
+-- | Sum up all the Coin for each staking Credential. This function has an
+--   incremental analog. See 'incrementalAggregateUtxoCoinByCredential'
+aggregateUtxoCoinByCredential ::
+  forall era.
+  ( Era era
+  ) =>
+  Map Ptr (Credential 'Staking (Crypto era)) ->
+  UTxO era ->
+  Map (Credential 'Staking (Crypto era)) Coin ->
+  Map (Credential 'Staking (Crypto era)) Coin
+aggregateUtxoCoinByCredential ptrs (UTxO u) initial =
+  Map.foldl' accum initial u
+  where
+    accum !ans out =
+      case (getField @"address" out, getField @"value" out) of
+        (Addr _ _ (StakeRefPtr p), c) ->
+          case Map.lookup p ptrs of
+            Just cred -> Map.insertWith (<>) cred (Val.coin c) ans
+            Nothing -> ans
+        (Addr _ _ (StakeRefBase hk), c) ->
+          Map.insertWith (<>) hk (Val.coin c) ans
+        _other -> ans
+
+-- ==============================
+-- operations on IncrementalStake
+
+-- | Incrementally add the inserts 'utxoAdd' and the deletes 'utxoDel' to the IncrementalStake.
+updateStakeDistribution ::
+  ( Era era
+  ) =>
+  IncrementalStake (Crypto era) ->
+  UTxO era ->
+  UTxO era ->
+  IncrementalStake (Crypto era)
+updateStakeDistribution incStake0 utxoDel utxoAdd = incStake2
+  where
+    incStake1 = incrementalAggregateUtxoCoinByCredential id utxoAdd incStake0
+    incStake2 = incrementalAggregateUtxoCoinByCredential invert utxoDel incStake1
+
+-- | Incrementally sum up all the Coin for each staking Credential, use different 'mode' operations
+--   for inserts (id) and deletes (invert). Never store a (Coin 0) balance, since these do not occur
+--   in the non-incremental stye that works directly from the UTxO. This function has a non-incremental
+--   analog 'aggregateUtxoCoinByCredential'
+incrementalAggregateUtxoCoinByCredential ::
+  forall era.
+  ( Era era
+  ) =>
+  (Coin -> Coin) ->
+  UTxO era ->
+  IncrementalStake (Crypto era) ->
+  IncrementalStake (Crypto era)
+incrementalAggregateUtxoCoinByCredential mode (UTxO u) initial =
+  Map.foldl' accum initial u
+  where
+    keepOrDelete new Nothing =
+      case mode new of
+        Coin 0 -> Nothing
+        final -> Just final
+    keepOrDelete new (Just old) =
+      case mode new <> old of
+        Coin 0 -> Nothing
+        final -> Just final
+    accum ans@(IStake stake ptrs) out =
+      let c = Val.coin (getField @"value" out)
+       in case getField @"address" out of
+            Addr _ _ (StakeRefPtr p) -> IStake stake (Map.alter (keepOrDelete c) p ptrs)
+            Addr _ _ (StakeRefBase hk) -> IStake (Map.alter (keepOrDelete c) hk stake) ptrs
+            _other -> ans
+
+-- | Resolve inserts and deletes which were indexed by Ptrs, by looking them up in 'ptrs'
+--   and combining them with the ordinary stake. Zero out the Ptr indexed stake in the result.
+--   This function is meant to only be called at the Epoch boundary in the Snap Rule. It is not meant
+--   to be used to transform the IncrementalStake.
+resolveIncrementalPtrs :: Map Ptr (Credential 'Staking (Crypto era)) -> IncrementalStake (Crypto era) -> IncrementalStake (Crypto era)
+resolveIncrementalPtrs ptrs (IStake stake byPtr) = IStake (Map.foldlWithKey' accum stake byPtr) Map.empty
+  where
+    accum ans ptr coin =
+      case Map.lookup ptr ptrs of
+        Nothing -> ans
+        Just hash -> Map.insertWith (<>) hash coin ans
+
+-- | Compute the current state distribution by using the IncrementalStake, which is an aggregate
+--   of the current UTxO. This function has a non-incremental analog 'takeDistr'
+--   analog 'aggregateUtxoCoinByCredential'
+incrementalStakeDistr ::
+  forall era.
+  IncrementalStake (Crypto era) ->
+  DState (Crypto era) ->
+  PState (Crypto era) ->
+  SnapShot (Crypto era)
+incrementalStakeDistr incstake ds ps =
+  SnapShot
+    (Stake (eval (dom activeDelegs ◁ stake1)))
+    delegs
+    poolParams
+  where
+    DState rewards' delegs bimap _ _ _ = ds
+    PState poolParams _ _ = ps
+    stake0, stake1 :: Map (Credential 'Staking (Crypto era)) Coin
+    (IStake stake0 _) = resolveIncrementalPtrs @era (forwards bimap) incstake
+    stake1 = Map.unionWith (<>) stake0 rewards'
+    activeDelegs :: Map (Credential 'Staking (Crypto era)) (KeyHash 'StakePool (Crypto era))
+    activeDelegs = eval ((dom rewards' ◁ delegs) ▷ dom poolParams)
+
+-- | A valid (or self-consistent) UTxOState{_utxo, _deposited, _fees, _ppups, _stakeDistro}
+--   maintains an invariant between the _utxo and _stakeDistro fields. the _stakeDistro field is
+--   the aggregation of Coin over the StakeReferences in the UTxO. It can be computed by a pure
+--   function from the _utxo field. In some situations, mostly unit or example tests, or when
+--   initializing a small UTxO, we want to create a UTxOState that computes the _stakeDistro from
+--   the _utxo. This is aways safe to do, but if the _utxo field is big, this can be very expensive,
+--   which defeats the purpose of memoizing the _stakeDistro field. So use of this function should be
+--   restricted to tests and initializations, where the invariant should be maintained.
+smartUTxOState ::
+  ( Era era
+  ) =>
+  UTxO era ->
+  Coin ->
+  Coin ->
+  State (Core.EraRule "PPUP" era) ->
+  UTxOState era
+smartUTxOState utxo c1 c2 st =
+  UTxOState
+    utxo
+    c1
+    c2
+    st
+    (updateStakeDistribution (IStake Map.empty Map.empty) (UTxO Map.empty) utxo)
+
+-- ==============================
 
 -- | Apply a reward update
 applyRUpd ::
@@ -1373,7 +1564,7 @@ updateNES
 
 returnRedeemAddrsToReserves ::
   forall era.
-  (Era era, HasField "address" (Core.TxOut era) (Addr (Crypto era))) =>
+  (Era era) =>
   EpochState era ->
   EpochState era
 returnRedeemAddrsToReserves es = es {esAccountState = acnt', esLState = ls'}
@@ -1405,7 +1596,7 @@ instance
   Default (State (Core.EraRule "PPUP" era)) =>
   Default (UTxOState era)
   where
-  def = UTxOState (UTxO Map.empty) (Coin 0) (Coin 0) def
+  def = UTxOState (UTxO Map.empty) (Coin 0) (Coin 0) def (IStake mempty Map.empty)
 
 instance
   (Default (LedgerState era), Default (Core.PParams era)) =>
@@ -1423,14 +1614,17 @@ instance Default (InstantaneousRewards crypto) where
   def = InstantaneousRewards Map.empty Map.empty mempty mempty
 
 instance Default (DState crypto) where
-  def =
-    DState
-      Map.empty
-      Map.empty
-      biMapEmpty
-      Map.empty
-      (GenDelegs Map.empty)
-      def
+  def = emptyDState
+
+emptyDState :: (DState crypto)
+emptyDState =
+  DState
+    Map.empty
+    Map.empty
+    biMapEmpty
+    Map.empty
+    (GenDelegs Map.empty)
+    def
 
 instance Default (PState crypto) where
   def =

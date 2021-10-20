@@ -23,7 +23,6 @@ module Cardano.Ledger.Shelley.EpochBoundary
     SnapShots (..),
     emptySnapShot,
     emptySnapShots,
-    aggregateUtxoCoinByCredential,
     poolStake,
     obligation,
     maxPool,
@@ -35,7 +34,6 @@ module Cardano.Ledger.Shelley.EpochBoundary
 where
 
 import Cardano.Binary (FromCBOR (..), ToCBOR (..), encodeListLen)
-import Cardano.Ledger.Address (Addr (..))
 import Cardano.Ledger.BaseTypes (BoundedRational (..), NonNegativeInterval)
 import qualified Cardano.Ledger.BaseTypes as Core (BlocksMade)
 import Cardano.Ledger.Coin
@@ -43,16 +41,12 @@ import Cardano.Ledger.Coin
     coinToRational,
     rationalToCoinViaFloor,
   )
-import qualified Cardano.Ledger.Core as Core
-import Cardano.Ledger.Credential (Credential, Ptr, StakeReference (..))
+import Cardano.Ledger.Credential (Credential)
 import qualified Cardano.Ledger.Crypto as CC (Crypto)
-import Cardano.Ledger.Era
 import Cardano.Ledger.Keys (KeyHash, KeyRole (..))
 import Cardano.Ledger.Serialization (decodeRecordNamed)
 import Cardano.Ledger.Shelley.TxBody (PoolParams)
-import Cardano.Ledger.Shelley.UTxO (UTxO (..))
 import Cardano.Ledger.Val ((<+>), (<×>))
-import qualified Cardano.Ledger.Val as Val
 import Control.DeepSeq (NFData)
 import Control.SetAlgebra (dom, eval, setSingleton, (▷), (◁))
 import Data.Default.Class (Default, def)
@@ -66,49 +60,12 @@ import Numeric.Natural (Natural)
 
 -- | Type of stake as map from hash key to coins associated.
 newtype Stake crypto = Stake
-  { unStake :: Map (Credential 'Staking crypto) Coin
-  }
+  {unStake :: Map (Credential 'Staking crypto) Coin}
   deriving (Show, Eq, Ord, NoThunks, NFData)
 
-deriving newtype instance
-  CC.Crypto crypto => ToCBOR (Stake crypto)
+deriving newtype instance CC.Crypto crypto => ToCBOR (Stake crypto)
 
-deriving newtype instance
-  CC.Crypto crypto => FromCBOR (Stake crypto)
-
--- A TxOut has 4 different shapes, depending on the shape its embedded of Addr.
--- Credentials are stored in only 2 of the 4 cases.
--- 1) TxOut (Addr _ _ (StakeRefBase cred)) coin   -> HERE
--- 2) TxOut (Addr _ _ (StakeRefPtr ptr)) coin     -> HERE
--- 3) TxOut (Addr _ _ StakeRefNull) coin          -> NOT HERE
--- 4) TxOut (AddrBootstrap _) coin                -> NOT HERE
--- Unfortunately TxOut is a pattern, that deserializes the address. This can be expensive, so if
--- we only deserialize the parts that we need, for the 2 cases that count, we can speed
--- things up considerably. That is the role of deserialiseAddrStakeRef. It returns (Just stake)
--- for the two cases that matter, and Nothing for the other two cases.
-
--- | Sum up all the Coin for each staking Credential
-aggregateUtxoCoinByCredential ::
-  forall era.
-  ( Era era,
-    HasField "address" (Core.TxOut era) (Addr (Crypto era))
-  ) =>
-  Map Ptr (Credential 'Staking (Crypto era)) ->
-  UTxO era ->
-  Map (Credential 'Staking (Crypto era)) Coin ->
-  Map (Credential 'Staking (Crypto era)) Coin
-aggregateUtxoCoinByCredential ptrs (UTxO u) initial =
-  Map.foldl' accum initial u
-  where
-    accum !ans out =
-      case (getField @"address" out, getField @"value" out) of
-        (Addr _ _ (StakeRefPtr p), c) ->
-          case Map.lookup p ptrs of
-            Just cred -> Map.insertWith (<>) cred (Val.coin c) ans
-            Nothing -> ans
-        (Addr _ _ (StakeRefBase hk), c) ->
-          Map.insertWith (<>) hk (Val.coin c) ans
-        _other -> ans
+deriving newtype instance CC.Crypto crypto => FromCBOR (Stake crypto)
 
 -- | Get stake of one pool
 poolStake ::
@@ -117,7 +74,7 @@ poolStake ::
   Stake crypto ->
   Stake crypto
 poolStake hk delegs (Stake stake) =
-  Stake $ eval (dom (delegs ▷ setSingleton hk) ◁ stake)
+  Stake (eval (dom (delegs ▷ setSingleton hk) ◁ stake))
 
 -- | Calculate total possible refunds.
 obligation ::

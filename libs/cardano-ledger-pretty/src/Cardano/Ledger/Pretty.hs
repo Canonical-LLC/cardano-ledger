@@ -84,6 +84,7 @@ import Cardano.Ledger.Shelley.LedgerState
     DState (..),
     EpochState (..),
     FutureGenDeleg (..),
+    IncrementalStake (..),
     InstantaneousRewards (..),
     Ix,
     LedgerState (..),
@@ -648,17 +649,26 @@ ppReward (Reward rt pool amt) =
       ("rewardAmount", ppCoin amt)
     ]
 
+ppIncrementalStake :: IncrementalStake crypto -> PDoc
+ppIncrementalStake (IStake st dangle) =
+  ppRecord
+    "IncrementalStake"
+    [ ("credMap", ppStake (Stake st)),
+      ("ptrMap", ppMap ppPtr ppCoin dangle)
+    ]
+
 ppUTxOState ::
   CanPrettyPrintLedgerState era =>
   UTxOState era ->
   PDoc
-ppUTxOState (UTxOState u dep fee ppup) =
+ppUTxOState (UTxOState u dep fee ppup sd) =
   ppRecord
     "UTxOState"
     [ ("utxo", ppUTxO u),
       ("deposited", ppCoin dep),
       ("fees", ppCoin fee),
-      ("ppups", prettyA ppup)
+      ("ppups", prettyA ppup),
+      ("stakeDistro", ppIncrementalStake sd)
     ]
 
 ppEpochState :: CanPrettyPrintLedgerState era => EpochState era -> PDoc
@@ -751,6 +761,9 @@ instance
   PrettyA (UTxOState era)
   where
   prettyA = ppUTxOState
+
+instance PrettyA (IncrementalStake c) where
+  prettyA = ppIncrementalStake
 
 -- =================================
 -- Cardano.Ledger.Shelley.Rewards

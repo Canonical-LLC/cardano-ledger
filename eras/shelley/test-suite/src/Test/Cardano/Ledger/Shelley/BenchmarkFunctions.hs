@@ -56,6 +56,7 @@ import Cardano.Ledger.Shelley.Delegation.Certificates (DelegCert (..))
 import Cardano.Ledger.Shelley.LedgerState
   ( AccountState (..),
     DPState,
+    IncrementalStake (..),
     UTxOState (..),
   )
 import Cardano.Ledger.Shelley.PParams (PParams, PParams' (..), emptyPParams)
@@ -154,6 +155,7 @@ initUTxO n =
     (Coin 0)
     (Coin 0)
     def
+    (IStake mempty mempty)
 
 -- Protocal Parameters used for the benchmarknig tests.
 -- Note that the fees and deposits are set to zero for

@@ -216,7 +216,7 @@ getPoolParameters = Map.restrictKeys . f
 -- This is not based on any snapshot, but uses the current ledger state.
 poolsByTotalStakeFraction ::
   forall era.
-  (UsesValue era, HasField "address" (Core.TxOut era) (Addr (Crypto era))) =>
+  (UsesValue era) =>
   Globals ->
   NewEpochState era ->
   PoolDistr (Crypto era)
@@ -251,8 +251,7 @@ getTotalStake globals ss =
 getNonMyopicMemberRewards ::
   ( UsesValue era,
     HasField "_a0" (Core.PParams era) NonNegativeInterval,
-    HasField "_nOpt" (Core.PParams era) Natural,
-    HasField "address" (Core.TxOut era) (Addr (Crypto era))
+    HasField "_nOpt" (Core.PParams era) Natural
   ) =>
   Globals ->
   NewEpochState era ->
@@ -325,9 +324,7 @@ getNonMyopicMemberRewards globals ss creds =
 -- do not want to use one of the regular snapshots, but rather the most recent
 -- ledger state.
 currentSnapshot ::
-  ( UsesValue era,
-    HasField "address" (Core.TxOut era) (Addr (Crypto era))
-  ) =>
+  (UsesValue era) =>
   NewEpochState era ->
   EB.SnapShot (Crypto era)
 currentSnapshot ss =
@@ -398,8 +395,7 @@ deriving instance ToJSON RewardParams
 getRewardInfoPools ::
   ( UsesValue era,
     HasField "_a0" (Core.PParams era) NonNegativeInterval,
-    HasField "_nOpt" (Core.PParams era) Natural,
-    HasField "address" (Core.TxOut era) (Addr (Crypto era))
+    HasField "_nOpt" (Core.PParams era) Natural
   ) =>
   Globals ->
   NewEpochState era ->
@@ -652,7 +648,7 @@ totalAdaPotsES (EpochState (AccountState treasury_ reserves_) _ ls _ _ _) =
       feesAdaPot = fees_
     }
   where
-    (UTxOState u deposits fees_ _) = _utxoState ls
+    (UTxOState u deposits fees_ _ _) = _utxoState ls
     (DPState ds _) = _delegationState ls
     rewards_ = fold (Map.elems (_rewards ds))
     coins = Val.coin $ balance u

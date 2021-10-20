@@ -16,6 +16,7 @@ import Cardano.Ledger.Shelley.API.Types
     DState (_genDelegs),
     EpochState (EpochState),
     GenDelegs (GenDelegs),
+    IncrementalStake (..),
     LedgerState (LedgerState),
     NewEpochState (NewEpochState),
     PoolDistr (PoolDistr),
@@ -67,6 +68,7 @@ instance
                   (Coin 0)
                   (Coin 0)
                   def
+                  (IStake mempty Map.empty)
               )
               (DPState (def {_genDelegs = GenDelegs genDelegs}) def)
           )
