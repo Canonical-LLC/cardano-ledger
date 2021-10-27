@@ -1,8 +1,5 @@
 module Cardano.Rewards.Common
-  ( maxSupply
-  , slotsPerEpoch
-
-  , poolR
+  ( poolR
   , memberRew
   , leaderRew
   , poolRewardInfo
@@ -14,12 +11,6 @@ import Data.Ratio ((%))
 import qualified Data.Set as Set
 
 import Cardano.Rewards.Types
-
-maxSupply :: Coin
-maxSupply = 45000000
-
-slotsPerEpoch :: Integer
-slotsPerEpoch = 100
 
 maxPool ::
   ProtocolParameters ->
@@ -161,8 +152,10 @@ getRewardParameters ::
   BlocksMade p ->
   Coin ->
   Coin ->
+  Coin ->
+  Integer ->
   (Coin, Coin, BlockCount)
-getRewardParameters pp blocks fees reserves =
+getRewardParameters pp blocks fees reserves maxSupply slotsPerEpoch =
   (_R, totalStake, blocksTotal)
   where
     blocksTotal = sum blocks

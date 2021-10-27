@@ -1,7 +1,7 @@
 {-# LANGUAGE DerivingVia #-}
 
 module Cardano.Rewards.Types
-  ( Coin
+  ( Coin (..)
   , coinFloor
   , coinToQ
   , coinRatio
@@ -62,7 +62,7 @@ data ProtocolParameters =
     , κ :: Integer
     , ρ    :: Rational
     , τ  :: Rational
-    }
+    } deriving (Show)
 
 data PoolRewardInfo c =
   PoolRewardInfo

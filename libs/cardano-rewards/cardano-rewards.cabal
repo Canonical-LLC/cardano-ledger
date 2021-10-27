@@ -29,7 +29,25 @@ common project-config
 library
   import:             project-config
   build-depends:      containers
-  exposed-modules:    Cardano.Rewards
-                    , Cardano.Rewards.Common
+  exposed-modules:    Cardano.Rewards.Common
+                    , Cardano.Rewards.Original
+                    , Cardano.Rewards.Refined
                     , Cardano.Rewards.Types
   hs-source-dirs:     src
+
+test-suite cardano-rewards-test
+  import:             project-config
+  type:               exitcode-stdio-1.0
+  main-is:            Tests.hs
+  other-modules:      Test.Cardano.Rewards.Arbitrary
+  hs-source-dirs:     test
+  ghc-options:        -O2
+                      -threaded
+                      -rtsopts
+                      -with-rtsopts=-N
+
+  build-depends:    cardano-rewards
+                  , containers
+                  , tasty
+                  , tasty-quickcheck
+                  , QuickCheck
