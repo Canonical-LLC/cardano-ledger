@@ -6,14 +6,12 @@ module Cardano.Ledger.Shelley.HardForks
   ( aggregatedRewards,
     allowMIRTransfer,
     validatePoolRewardAccountNetID,
-    allowScriptStakeCredsToEarnRewards,
     translateTimeForPlutusScripts,
   )
 where
 
 import Cardano.Ledger.BaseTypes (ProtVer (..))
 import GHC.Records
-import Numeric.Natural (Natural)
 
 aggregatedRewards ::
   (HasField "_protocolVersion" pp ProtVer) =>
@@ -41,13 +39,6 @@ validatePoolRewardAccountNetID ::
   pp ->
   Bool
 validatePoolRewardAccountNetID pp = pvMajor (getField @"_protocolVersion" pp) > 4
-
--- | Starting with protocol version 5, Stake Credentials bound by scripts
--- will be eligibile for staking rewards.
-allowScriptStakeCredsToEarnRewards ::
-  Natural ->
-  Bool
-allowScriptStakeCredsToEarnRewards pvM = pvM > 4
 
 -- | Starting with protocol version 6, we translate slots to time correctly for
 -- Plutus scripts.

@@ -302,8 +302,7 @@ rewardStakePool
       slotsPerEpoch,
       pp_d,
       pp_a0,
-      pp_nOpt,
-      pp_mv
+      pp_nOpt
     }
   (RewardAns m1 m2)
   pparams = do
@@ -321,7 +320,7 @@ rewardStakePool
     case blocksProduced of
       Nothing -> pure $ RewardAns m1 (Map.insert hk ls m2)
       Just n -> do
-        m <- rewardOnePool (pp_d, pp_a0, pp_nOpt, pp_mv) r n totalBlocks pparams actgr sigma sigmaA (Coin totalStake) addrsRew
+        m <- rewardOnePool (pp_d, pp_a0, pp_nOpt) r n totalBlocks pparams actgr sigma sigmaA (Coin totalStake) addrsRew
         pure $ RewardAns (Map.unionWith Set.union m m1) (Map.insert hk ls m2)
 
 -- ================================================================
