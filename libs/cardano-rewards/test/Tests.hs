@@ -1,15 +1,25 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 module Main where
 
-import Cardano.Rewards.Original as Original (rewards)
-import Cardano.Rewards.Refined as Refined (rewards)
-import Cardano.Rewards.Types
-import Test.Cardano.Rewards.Arbitrary (Example (..))
-
 import qualified Data.Map as Map
+import Data.Word (Word64)
+import Numeric.Natural (Natural)
 import Data.Ratio ((%))
 import qualified Data.Set as Set
 import Test.Tasty
 import Test.Tasty.QuickCheck
+
+import Cardano.Rewards
+import Test.Cardano.Rewards.Arbitrary (RewardParameters (..))
+
+testEquality :: (Show c, Ord p, Ord c) => RewardParameters p c -> Property
+testEquality (RewardParameters pp pools blocks delegations stake fees reserves maxSupply slotsPerEpoch) =
+  withMaxSuccess 10000 $ removeZeros results1 === removeZeros results2
+  where
+    results1 = rewardsA pp pools blocks delegations stake fees reserves maxSupply slotsPerEpoch
+    results2 = rewardsB pp pools blocks delegations stake fees reserves maxSupply slotsPerEpoch
+    removeZeros = Map.filter (/= 0)
 
 aliceSC :: StakeCredential String
 aliceSC = StakeCredential "alice"
@@ -24,9 +34,9 @@ ppEx :: ProtocolParameters
 ppEx = ProtocolParameters
        { asc = 1 % 20
        , d = 1 % 100
-       , κ = 2
-       , ρ = 1 % 100
-       , τ = 20 % 100
+       , k = 2
+       , rho = 1 % 100
+       , tau = 20 % 100
        }
 
 poolsEx :: Pools String String
@@ -66,26 +76,31 @@ reservesEx :: Coin
 reservesEx = 1000000
 
 maxSupplyEx :: Coin
-maxSupplyEx = 1000000
+maxSupplyEx = 45000000
 
 slotsPerEpochEx :: Integer
 slotsPerEpochEx = 100
 
-testEquality :: (Show c, Ord p, Ord c) => Example p c -> Property
-testEquality (Example pp pools blocks delegations stake fees reserves maxSupply slotsPerEpoch) =
-  removeZeros results1 === removeZeros results2
-  where
-    results1 = Original.rewards pp pools blocks delegations stake fees reserves maxSupply slotsPerEpoch
-    results2 = Refined.rewards pp pools blocks delegations stake fees reserves maxSupply slotsPerEpoch
-    removeZeros = Map.filter (/= 0)
-
 ex1 :: Property
-ex1 = testEquality (Example ppEx poolsEx blocksEx delegationsEx stakeEx feesEx reservesEx maxSupplyEx slotsPerEpochEx)
+ex1 = testEquality $
+        RewardParameters
+          ppEx
+          poolsEx
+          blocksEx
+          delegationsEx
+          stakeEx
+          feesEx
+          reservesEx
+          maxSupplyEx
+          slotsPerEpochEx
+
+instance Arbitrary Natural where
+  arbitrary = fromIntegral <$> (arbitrary :: Gen Word64)
 
 tests :: TestTree
 tests = testGroup "Cardano Rewards"
   [ testProperty "equality example" ex1
-  , testProperty "equality prop" (testEquality :: Example Int Int -> Property)
+  , testProperty "equality prop" (testEquality :: RewardParameters Natural Natural -> Property)
   ]
 
 main :: IO ()

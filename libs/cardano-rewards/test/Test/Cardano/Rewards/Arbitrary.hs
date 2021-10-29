@@ -11,7 +11,7 @@ import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Test.Tasty.QuickCheck
-import Cardano.Rewards.Types
+import Cardano.Rewards
 
 instance Arbitrary a => Arbitrary (StakeCredential a) where
   arbitrary = StakeCredential <$> arbitrary
@@ -28,7 +28,7 @@ pickOwners creds = Set.fromList <$> resize 3 (sublistOf creds)
 genPoolParams :: Ord a => [StakeCredential a] -> Gen (PoolParameters a)
 genPoolParams creds = do
   c <- arbitrary
-  m <- choosePct
+  m <- (choosePct 0)
   p <- arbitrary
   os <- pickOwners creds
   psc <- elements creds
@@ -60,20 +60,24 @@ genDelegs pids creds = genMapFromKeyList (elements pids) creds
 genStakeDstr :: Ord a => [StakeCredential a] -> Gen (StakeDistribution a)
 genStakeDstr creds = genMapFromKeyList arbitrary creds
 
-choosePct :: Gen Rational
-choosePct = (% 100) <$> choose (0, 100)
+genNonEmptyStakeDstr :: (Ord a, Arbitrary a) => [StakeCredential a] -> Gen (StakeDistribution a)
+genNonEmptyStakeDstr creds = 
+  (Map.insertWith (<>)) <$> arbitrary <*> (pure 1) <*> (genStakeDstr creds)
+
+choosePct :: Integer -> Gen Rational
+choosePct minP = (% 100) <$> choose (minP, 100)
 
 instance Arbitrary ProtocolParameters where
   arbitrary =
     ProtocolParameters
-      <$> choosePct -- asc
-      <*> choosePct -- d
+      <$> (choosePct 1) -- asc
+      <*> (choosePct 0) -- d
       <*> (choose (1, 1000000)) -- κ
-      <*> choosePct -- ρ
-      <*> choosePct -- τ
+      <*> (choosePct 10) -- ρ
+      <*> (choosePct 1) -- τ
 
-data Example p c =
-  Example
+data RewardParameters p c =
+  RewardParameters
     ProtocolParameters
     (Pools p c)
     (BlocksMade p)
@@ -86,7 +90,7 @@ data Example p c =
   deriving (Show)
 
 instance (Ord p, Arbitrary p, Ord c, Arbitrary c) =>
-  Arbitrary (Example p c) where
+  Arbitrary (RewardParameters p c) where
   arbitrary = do
     pp <- arbitrary
     pids <- (Set.toList . Set.fromList) <$> (listOf1 arbitrary)
@@ -94,23 +98,19 @@ instance (Ord p, Arbitrary p, Ord c, Arbitrary c) =>
     pools <- genPools pids creds
     blocks <- genBlocks pids
     delegs <- genDelegs pids creds
-    stakeDistr <- genStakeDstr creds
-    stakeCred <- arbitrary
+    stakeDistr <- genNonEmptyStakeDstr creds
     reserves <- arbitrary
-    maxSupply <- arbitrary
-    let stakeDistr' = Map.insertWith (<>) stakeCred 1 stakeDistr -- keep the stake non-zero
-        totalActive = sum stakeDistr'
-        reserves' = reserves <> 100
-        maxSupply' = totalActive <> reserves' <> maxSupply
+    unActiveStake <- arbitrary
     fee <- arbitrary
     slotsPerEpoch <- choose (100, 1000)
-    pure $ Example
+    let maxSupply = sum stakeDistr <> reserves <> unActiveStake
+    pure $ RewardParameters
              pp
              pools
              blocks
              delegs
-             stakeDistr'
+             stakeDistr
              fee
-             reserves'
-             maxSupply'
+             reserves
+             maxSupply
              slotsPerEpoch

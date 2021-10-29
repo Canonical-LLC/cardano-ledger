@@ -29,7 +29,8 @@ common project-config
 library
   import:             project-config
   build-depends:      containers
-  exposed-modules:    Cardano.Rewards.Common
+  exposed-modules:    Cardano.Rewards
+                    , Cardano.Rewards.Common
                     , Cardano.Rewards.Original
                     , Cardano.Rewards.Refined
                     , Cardano.Rewards.Types

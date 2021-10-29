@@ -1,9 +1,8 @@
 module Cardano.Rewards.Common
-  ( poolR
+  ( getRewardParameters
+  , poolRewardInfo
   , memberRew
   , leaderRew
-  , poolRewardInfo
-  , getRewardParameters
   ) where
 
 import qualified Data.Map as Map
@@ -56,6 +55,7 @@ maxP pp pool r totalStake sigma ownerLovelace =
     else 0
   where
     pledgeRatio = coinRatio (pledge pool) totalStake
+
 poolR ::
   ProtocolParameters ->
   PoolParameters c ->
@@ -162,6 +162,7 @@ getRewardParameters pp blocks fees reserves maxSupply slotsPerEpoch =
     expectedBlocks = floor $ (1 - d pp) * asc pp * fromIntegral slotsPerEpoch
     η
       | d pp >= 0.8 = 1
+      | expectedBlocks == 0 = 0
       | otherwise = unBlockCount blocksTotal % expectedBlocks
     δr = coinFloor $ min 1 η * ρ pp * coinToQ reserves
     rewardPot = fees + δr
