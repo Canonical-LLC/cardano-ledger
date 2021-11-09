@@ -90,8 +90,10 @@ import Cardano.Ledger.Shelley.Rewards
   ( Likelihood (..),
     LogWeight (..),
     PerformanceEstimate (..),
+    PoolRewardInfo (..),
     Reward (..),
     RewardType (..),
+    StakeShare (..),
   )
 import qualified Cardano.Ledger.Shelley.Rules.Deleg as STS
 import qualified Cardano.Ledger.Shelley.Rules.Delegs as STS
@@ -967,6 +969,15 @@ instance
       <*> arbitrary
       <*> arbitrary
       <*> arbitrary
+
+instance
+  Mock crypto =>
+  Arbitrary (PoolRewardInfo crypto)
+  where
+  arbitrary =
+    PoolRewardInfo
+      <$> (StakeShare <$> arbitrary)
+      <*> arbitrary
       <*> arbitrary
       <*> arbitrary
       <*> arbitrary
@@ -977,23 +988,14 @@ instance
   where
   arbitrary =
     FreeVars
-      <$> arbitrary {- b -}
-      <*> arbitrary {- delegs -}
-      <*> arbitrary {- stake -}
-      <*> arbitrary {- addrsRew -}
+      <$> arbitrary {- addrsRew -}
       <*> arbitrary {- totalStake -}
-      <*> arbitrary {- activeStake -}
-      <*> arbitrary {- asc -}
-      <*> arbitrary {- totalBlocks -}
-      <*> arbitrary {- r -}
-      <*> (EpochSize <$> arbitrary {- slotsPerEpoch -})
-      <*> arbitrary {- pp_d -}
-      <*> arbitrary {- pp_a0 -}
-      <*> arbitrary {- pp_nOpt -}
       <*> arbitrary {- pp_mv -}
+      <*> arbitrary {- poolRewardInfo -}
+      <*> arbitrary {- delegations -}
 
 instance
   Mock crypto =>
   Arbitrary (Pulser crypto)
   where
-  arbitrary = RSLP <$> arbitrary <*> arbitrary <*> arbitrary <*> (RewardAns <$> arbitrary <*> arbitrary)
+  arbitrary = RSLP <$> arbitrary <*> arbitrary <*> arbitrary <*> (RewardAns <$> arbitrary)

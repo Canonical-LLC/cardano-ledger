@@ -19,6 +19,7 @@ module Cardano.Ledger.Shelley.Rewards
     NonMyopic (..),
     getTopRankedPools,
     StakeShare (..),
+    PoolRewardInfo (..),
     mkApparentPerformance,
     RewardType (..),
     Reward (..),
@@ -35,7 +36,8 @@ module Cardano.Ledger.Shelley.Rewards
     memberRew,
     aggregateRewards,
     sumRewards,
-    rewardOnePool,
+    rewardOnePoolMember,
+    mkPoolRewardInfo,
   )
 where
 
@@ -50,6 +52,7 @@ import Cardano.Binary
   )
 import Cardano.Ledger.BaseTypes
   ( ActiveSlotCoeff,
+    BlocksMade (..),
     BoundedRational (..),
     NonNegativeInterval,
     ProtVer,
@@ -75,14 +78,13 @@ import Cardano.Ledger.Shelley.EpochBoundary
   ( Stake (..),
     maxPool,
     maxPool',
+    poolStake,
   )
 import qualified Cardano.Ledger.Shelley.HardForks as HardForks
-import Cardano.Ledger.Shelley.RewardProvenance (RewardProvenancePool (..))
-import Cardano.Ledger.Shelley.TxBody (PoolParams (..), getRwdCred)
+import Cardano.Ledger.Shelley.TxBody (PoolParams (..))
 import Cardano.Ledger.Val ((<->))
 import Cardano.Slotting.Slot (EpochSize (..))
 import Control.DeepSeq (NFData)
-import Control.Provenance (ProvM, modifyM)
 import Data.Coders (Decode (..), Encode (..), decode, encode, (!>), (<!))
 import Data.Default.Class (Default, def)
 import Data.Foldable (find, fold)
@@ -118,7 +120,7 @@ newtype Histogram = Histogram {unHistogram :: StrictSeq LogWeight}
 
 newtype Likelihood = Likelihood {unLikelihood :: StrictSeq LogWeight}
   -- TODO: replace with small data structure
-  deriving (Show, Generic, NFData)
+  deriving (Show, Ord, Generic, NFData)
 
 instance NoThunks Likelihood
 
@@ -335,6 +337,8 @@ newtype StakeShare = StakeShare {unStakeShare :: Rational}
   deriving (Generic, Ord, Eq, NoThunks)
   deriving (Show) via Quiet StakeShare
 
+instance NFData StakeShare
+
 -- | Calculate pool reward
 mkApparentPerformance ::
   UnitInterval ->
@@ -451,117 +455,135 @@ aggregateRewards pp rewards =
     -- s should never be null, but we are being cautious
     lastByOrd s = if Set.null s then mempty else (rewardAmount . Set.findMin) s
 
--- | Reward one pool. The first argument (the triple (pp_d, pp_a0, pp_nOpt))
---     is a subset of the fields of PParams
---     { _d :: !(HKD f UnitInterval) --  Decentralization parameter
---     , _a0 :: !(HKD f NonNegativeInterval),   -- Pool influence
---     , _nOpt :: !(HKD f Natural)   -- Desired number of pools
---     }
-rewardOnePool ::
-  forall c m.
-  Monad m =>
-  (UnitInterval, NonNegativeInterval, Natural, Natural) ->
-  Coin ->
+-- | Stake Pool specific information needed to compute the rewards
+-- for its members.
+data PoolRewardInfo crypto = PoolRewardInfo
+  { -- | The stake pool's stake divided by the total stake
+    poolRelativeStake :: !StakeShare,
+    -- | The maximum rewards available for the entire pool
+    poolPot :: !Coin,
+    -- | The stake pool parameters
+    poolPs :: !(PoolParams crypto),
+    -- | The number of blocks the stake pool produced
+    poolBlocks :: !Natural,
+    -- | The leader reward
+    poolLeaderReward :: !(Reward crypto)
+  }
+  deriving (Show, Eq, Ord, Generic)
+
+instance NoThunks (PoolRewardInfo crypto)
+
+instance NFData (PoolRewardInfo crypto)
+
+instance CC.Crypto crypto => ToCBOR (PoolRewardInfo crypto) where
+  toCBOR
+    (PoolRewardInfo a b c d e) =
+      encode $
+        Rec PoolRewardInfo
+          !> E (toCBOR . unStakeShare) a
+          !> To b
+          !> To c
+          !> To d
+          !> To e
+
+instance CC.Crypto crypto => FromCBOR (PoolRewardInfo crypto) where
+  fromCBOR =
+    decode
+      ( RecD PoolRewardInfo
+          <! D (StakeShare <$> fromCBOR)
+          <! From
+          <! From
+          <! From
+          <! From
+      )
+
+notPoolOwner :: Natural -> PoolParams crypto -> Credential 'Staking crypto -> Bool
+notPoolOwner pp_mv pps = \case
+  KeyHashObj hk -> hk `Set.notMember` _poolOwners pps
+  ScriptHashObj _ -> HardForks.allowScriptStakeCredsToEarnRewards pp_mv
+
+-- | The stake pool member reward calculation
+rewardOnePoolMember ::
   Natural ->
-  Natural ->
-  PoolParams c ->
-  Stake c ->
-  Rational ->
-  Rational ->
   Coin ->
   Set (Credential 'Staking c) ->
-  ProvM
-    (Map (KeyHash 'StakePool c) (RewardProvenancePool c))
-    m
-    (Map (Credential 'Staking c) (Set (Reward c)))
-rewardOnePool
-  (pp_d, pp_a0, pp_nOpt, pp_mv)
-  -- (Decentralization parameter, Pool influence, Desired number of pools, major version)
-  r
-  blocksN
-  blocksTotal
-  pool
-  (Stake stake)
-  sigma
-  sigmaA
+  PoolRewardInfo c ->
+  Credential 'Staking c ->
+  Coin ->
+  Maybe (Set (Reward c))
+rewardOnePoolMember
+  pp_mv
   (Coin totalStake)
-  addrsRew = modifyM (Map.insert key provPool) >> pure rewards'
+  addrsRew
+  rewardInfo
+  hk
+  (Coin c) =
+    if hk `Set.member` addrsRew && notPoolOwner pp_mv (poolPs rewardInfo) hk && r /= Coin 0
+      then Just . Set.singleton $ Reward MemberReward (_poolId pool) r
+      else Nothing
     where
+      pool = poolPs rewardInfo
+      sigma = poolRelativeStake rewardInfo
+      poolR = poolPot rewardInfo
+      r = memberRew poolR pool (StakeShare (c % totalStake)) sigma
+
+-- | Calculate single stake pool specific values for the reward computation.
+mkPoolRewardInfo ::
+  (UnitInterval, NonNegativeInterval, Natural) ->
+  Coin ->
+  BlocksMade c ->
+  Natural ->
+  Stake c ->
+  Map (Credential 'Staking c) (KeyHash 'StakePool c) ->
+  Coin ->
+  Coin ->
+  PoolParams c ->
+  Either StakeShare (PoolRewardInfo c)
+mkPoolRewardInfo
+  (pp_d, pp_a0, pp_nOpt)
+  r
+  blocks
+  blocksTotal
+  stake
+  delegs
+  (Coin totalStake)
+  (Coin activeStake)
+  pool = case Map.lookup (_poolId pool) (unBlocksMade blocks) of
+    Nothing -> Left (StakeShare sigma)
+    Just blocksN ->
+      let Coin pledge = _poolPledge pool
+          pledgeRelative = pledge % totalStake
+          sigmaA = if activeStake == 0 then 0 else pstakeTot % activeStake
+          Coin maxP =
+            if pledge <= ostake
+              then maxPool' pp_a0 pp_nOpt r sigma pledgeRelative
+              else mempty
+          appPerf = mkApparentPerformance pp_d sigmaA blocksN blocksTotal
+          poolR = rationalToCoinViaFloor (appPerf * fromIntegral maxP)
+          lreward =
+            leaderRew
+              poolR
+              pool
+              (StakeShare $ if totalStake == 0 then 0 else ostake % totalStake)
+              (StakeShare sigma)
+          rewardInfo =
+            PoolRewardInfo
+              { poolRelativeStake = StakeShare sigma,
+                poolPot = poolR,
+                poolPs = pool,
+                poolBlocks = blocksN,
+                poolLeaderReward = Reward LeaderReward (_poolId pool) lreward
+              }
+       in Right rewardInfo
+    where
+      Stake pstake = poolStake (_poolId pool) delegs stake
+      Coin pstakeTot = fold pstake
       Coin ostake =
         Set.foldl'
-          (\c o -> c <> Map.findWithDefault mempty (KeyHashObj o) stake)
+          (\c o -> c <> Map.findWithDefault mempty (KeyHashObj o) pstake)
           mempty
           (_poolOwners pool)
-      Coin pledge = _poolPledge pool
-      pr = fromIntegral pledge % fromIntegral totalStake
-      Coin maxP =
-        if pledge <= ostake
-          then maxPool' pp_a0 pp_nOpt r sigma pr
-          else mempty
-      appPerf = mkApparentPerformance pp_d sigmaA blocksN blocksTotal
-      poolR = rationalToCoinViaFloor (appPerf * fromIntegral maxP)
-      tot = fromIntegral totalStake
-      mRewards =
-        Map.fromList
-          [ ( hk,
-              Set.singleton $
-                Reward
-                  MemberReward
-                  (_poolId pool)
-                  ( memberRew
-                      poolR
-                      pool
-                      (StakeShare (fromIntegral c % tot))
-                      (StakeShare sigma)
-                  )
-            )
-            | (hk, Coin c) <- Map.toList stake,
-              notPoolOwner hk,
-              hk `Set.member` addrsRew
-          ]
-      notPoolOwner (KeyHashObj hk) = hk `Set.notMember` _poolOwners pool
-      notPoolOwner (ScriptHashObj _) = HardForks.allowScriptStakeCredsToEarnRewards pp_mv
-      lReward =
-        leaderRew
-          poolR
-          pool
-          (StakeShare $ fromIntegral ostake % tot)
-          (StakeShare sigma)
-      poolRA = getRwdCred $ _poolRAcnt pool
-      potentialRewards =
-        if poolRA `Set.member` addrsRew
-          then
-            Map.insertWith
-              Set.union
-              poolRA
-              (Set.singleton (Reward LeaderReward (_poolId pool) lReward))
-              mRewards
-          else mRewards
-      removeDegenerate rwds =
-        let notZeroMember (Reward MemberReward _ c) = c /= Coin 0
-            notZeroMember (Reward LeaderReward _ _) = True
-            -- We do not filter out zero valued Leader rewards since
-            -- prior to protocol version 3 the zero values can serve
-            -- as evidence that a member reward was overridden.
-            withoutZeros = Set.filter notZeroMember rwds
-         in if Set.null withoutZeros
-              then Nothing
-              else Just withoutZeros
-      rewards' = Map.mapMaybe removeDegenerate potentialRewards
-      key = _poolId pool
-      provPool =
-        RewardProvenancePool
-          { poolBlocksP = blocksN,
-            sigmaP = sigma,
-            sigmaAP = sigmaA,
-            ownerStakeP = Coin ostake,
-            poolParamsP = pool,
-            pledgeRatioP = pr,
-            maxPP = Coin maxP,
-            appPerfP = appPerf,
-            poolRP = poolR,
-            lRewardP = lReward
-          }
+      sigma = if totalStake == 0 then 0 else fromIntegral pstakeTot % fromIntegral totalStake
 
 -- | Compute the Non-Myopic Pool Stake
 --
