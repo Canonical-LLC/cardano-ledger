@@ -1,5 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -68,6 +66,7 @@ import Codec.CBOR.Read (deserialiseFromBytes)
 import Codec.CBOR.Write (toLazyByteString)
 import qualified Data.ByteString.Lazy as Lazy
 import Data.Maybe (fromJust)
+import Data.Sharing (fromNotSharedCBOR)
 import qualified Test.Cardano.Ledger.Shelley.ConcreteCryptoTypes as Mock
 import Test.Cardano.Ledger.Shelley.Generator.ShelleyEraGen ()
 import Test.Cardano.Ledger.Shelley.Serialisation.EraIndepGenerators ()
@@ -273,3 +272,6 @@ tests =
       testProperty "roundtrip reward provenance" prop_roundtrip_RewardProvenance,
       pulsingTest
     ]
+
+instance FromCBOR (Ledger.LedgerState Mock.C) where
+  fromCBOR = fromNotSharedCBOR

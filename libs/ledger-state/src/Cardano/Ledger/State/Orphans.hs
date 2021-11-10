@@ -23,6 +23,7 @@ import Cardano.Ledger.State.UTxO
 import Cardano.Ledger.TxIn
 import Control.DeepSeq
 import Data.ByteString.Short
+import Data.Sharing (fromNotSharedCBOR)
 import qualified Data.Text as T
 import Data.Typeable
 import Database.Persist
@@ -121,6 +122,12 @@ deriving via Enc (PPUPState CurrentEra) instance PersistFieldSql (PPUPState Curr
 deriving via Enc (TxOut CurrentEra) instance PersistField (TxOut CurrentEra)
 
 deriving via Enc (TxOut CurrentEra) instance PersistFieldSql (TxOut CurrentEra)
+
+instance FromCBOR (DState C) where
+  fromCBOR = fromNotSharedCBOR
+
+instance FromCBOR (PState C) where
+  fromCBOR = fromNotSharedCBOR
 
 deriving via Enc (DState C) instance PersistField (DState C)
 

@@ -55,6 +55,8 @@ module Control.SetAlgebra
     eval,
     -- Functions to build concrete Set-like things useable as Set Algebra Expressions
     materialize,
+    biMapToMap,
+    biMapFromMap,
     biMapFromList,
     biMapEmpty,
     fromList,

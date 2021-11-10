@@ -243,6 +243,11 @@ biMapFromAscDistinctList xs = MkBiMap bmForward bmBackward
     bmForward = Map.fromDistinctAscList xs
     bmBackward = foldr (uncurry $ flip addBack) Map.empty xs
 
+biMapFromMap ::
+  (Ord k, Ord v) => Map k v -> BiMap v k v
+biMapFromMap bmForward =
+  MkBiMap bmForward $ foldr (uncurry $ flip addBack) Map.empty $ Map.toList bmForward
+
 -- This synonym makes (BiMap v k v) appear as an ordinary Binary type contructor: (Bimap k v)
 type Bimap k v = BiMap v k v
 

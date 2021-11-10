@@ -6,6 +6,7 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -138,7 +139,7 @@ import Cardano.Ledger.Keys
   )
 import Cardano.Ledger.PoolDistr (PoolDistr (..))
 import Cardano.Ledger.SafeHash (HashAnnotated, extractHash, hashAnnotated)
-import Cardano.Ledger.Serialization (mapFromCBOR, mapToCBOR)
+import Cardano.Ledger.Serialization (decodeRecordNamedT, mapToCBOR)
 import Cardano.Ledger.Shelley.Address.Bootstrap
   ( BootstrapWitness (..),
     bootstrapWitKeyHash,
@@ -229,6 +230,8 @@ import Cardano.Ledger.Val ((<+>), (<->), (<×>))
 import qualified Cardano.Ledger.Val as Val
 import Cardano.Prelude (rightToMaybe)
 import Control.DeepSeq (NFData)
+import Control.Monad.State.Strict (evalStateT)
+import Control.Monad.Trans
 import Control.Provenance (ProvM, liftProv, modifyM)
 import Control.SetAlgebra (Bimap, biMapEmpty, dom, eval, forwards, (∈), (∪+), (▷), (◁))
 import Control.State.Transition (STS (State))
@@ -236,6 +239,7 @@ import Data.Coders
   ( Decode (From, RecD),
     decode,
     decodeRecordNamed,
+    encodeMap,
     (<!),
   )
 import qualified Data.Compact.VMap as VMap
@@ -251,10 +255,12 @@ import Data.Ratio ((%))
 import Data.Sequence.Strict (StrictSeq)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Sharing
 import Data.Typeable
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 import GHC.Records (HasField (..))
+import Lens.Micro (_1, _2)
 import NoThunks.Class (NoThunks (..))
 import Numeric.Natural (Natural)
 import Quiet
@@ -317,13 +323,14 @@ instance CC.Crypto crypto => ToCBOR (InstantaneousRewards crypto) where
   toCBOR (InstantaneousRewards irR irT dR dT) =
     encodeListLen 4 <> mapToCBOR irR <> mapToCBOR irT <> toCBOR dR <> toCBOR dT
 
-instance CC.Crypto crypto => FromCBOR (InstantaneousRewards crypto) where
-  fromCBOR = do
-    decodeRecordNamed "InstantaneousRewards" (const 4) $ do
-      irR <- mapFromCBOR
-      irT <- mapFromCBOR
-      dR <- fromCBOR
-      dT <- fromCBOR
+instance CC.Crypto crypto => FromSharedCBOR (InstantaneousRewards crypto) where
+  type Share (InstantaneousRewards crypto) = (Interns (Credential 'Staking crypto), Interns Coin)
+  fromSharedCBOR = do
+    decodeRecordNamedT "InstantaneousRewards" (const 4) $ do
+      irR <- fromSharedPlusCBOR
+      irT <- fromSharedPlusCBOR
+      dR <- lift fromCBOR
+      dT <- lift fromCBOR
       pure $ InstantaneousRewards irR irT dR dT
 
 -- | State of staking pool delegations and rewards
@@ -350,22 +357,25 @@ instance NFData (DState crypto)
 instance CC.Crypto crypto => ToCBOR (DState crypto) where
   toCBOR (DState rw dlg p fgs gs ir) =
     encodeListLen 6
-      <> toCBOR rw
-      <> toCBOR dlg
+      <> encodeMap toCBOR toCBOR rw -- toCBOR rw
+      <> encodeMap toCBOR toCBOR dlg -- toCBOR dlg
       <> toCBOR p
       <> toCBOR fgs
       <> toCBOR gs
       <> toCBOR ir
 
-instance CC.Crypto crypto => FromCBOR (DState crypto) where
-  fromCBOR = do
-    decodeRecordNamed "DState" (const 6) $ do
-      rw <- fromCBOR
-      dlg <- fromCBOR
-      p <- fromCBOR
-      fgs <- fromCBOR
-      gs <- fromCBOR
-      ir <- fromCBOR
+instance CC.Crypto crypto => FromSharedCBOR (DState crypto) where
+  type
+    Share (DState crypto) =
+      (Interns (Credential 'Staking crypto), Interns (KeyHash 'StakePool crypto))
+  fromSharedCBOR = do
+    decodeRecordNamedT "DState" (const 6) $ do
+      rw <- fromSharedPlusLensCBOR (toMemptyLens _1 _1)
+      dlg <- fromSharedPlusCBOR
+      p <- fromSharedPlusLensCBOR (toMemptyLens _2 _1)
+      fgs <- lift fromCBOR
+      gs <- lift fromCBOR
+      ir <- fromSharedPlusLensCBOR (toMemptyLens _1 _1)
       pure $ DState rw dlg p fgs gs ir
 
 -- | Current state of staking pools and their certificate counters.
@@ -387,10 +397,16 @@ instance CC.Crypto crypto => ToCBOR (PState crypto) where
   toCBOR (PState a b c) =
     encodeListLen 3 <> toCBOR a <> toCBOR b <> toCBOR c
 
-instance CC.Crypto crypto => FromCBOR (PState crypto) where
-  fromCBOR =
-    decodeRecordNamed "PState" (const 3) $
-      PState <$> fromCBOR <*> fromCBOR <*> fromCBOR
+instance CC.Crypto crypto => FromSharedCBOR (PState crypto) where
+  type
+    Share (PState crypto) =
+      Interns (KeyHash 'StakePool crypto)
+  fromSharedCBOR =
+    decodeRecordNamedT "PState" (const 3) $ do
+      _pParams <- fromSharedPlusLensCBOR (toMemptyLens _1 id)
+      _fPParams <- fromSharedPlusLensCBOR (toMemptyLens _1 id)
+      _retiring <- fromSharedPlusLensCBOR (toMemptyLens _1 id)
+      pure PState {_pParams, _fPParams, _retiring}
 
 -- | The state associated with the current stake delegation.
 data DPState crypto = DPState
@@ -408,14 +424,25 @@ instance
   ToCBOR (DPState crypto)
   where
   toCBOR (DPState ds ps) =
-    encodeListLen 2 <> toCBOR ds <> toCBOR ps
+    encodeListLen 2 <> toCBOR ps <> toCBOR ds
 
-instance
-  CC.Crypto crypto =>
-  FromCBOR (DPState crypto)
-  where
-  fromCBOR =
-    decodeRecordNamed "DPState" (const 2) $ DPState <$> fromCBOR <*> fromCBOR
+-- We serialize the fields of DPState out of order, so we must deserialize them in this order as well.
+-- We do this to get better Sharing
+
+instance CC.Crypto crypto => FromSharedCBOR (DPState crypto) where
+  type
+    Share (DPState crypto) =
+      ( Interns (Credential 'Staking crypto),
+        Interns (KeyHash 'StakePool crypto)
+      )
+  fromSharedCBOR =
+    decodeRecordNamedT "DPState" (const 2) $ do
+      _pstate <- fromSharedPlusLensCBOR _2
+      _dstate <- fromSharedPlusCBOR
+      pure DPState {_dstate, _pstate}
+
+-- We deserialize the fields of DPState out of order, because we serialized them in this backwards order.
+-- We do this to get better Sharing
 
 data AccountState = AccountState
   { _treasury :: !Coin,
@@ -468,7 +495,9 @@ instance (Era era, TransEpoch NFData era) => NFData (EpochState era)
 
 instance (TransEpoch ToCBOR era) => ToCBOR (EpochState era) where
   toCBOR (EpochState a s l r p n) =
-    encodeListLen 6 <> toCBOR a <> toCBOR s <> toCBOR l <> toCBOR r <> toCBOR p <> toCBOR n
+    encodeListLen 6 <> toCBOR a <> toCBOR l <> toCBOR s <> toCBOR r <> toCBOR p <> toCBOR n
+
+-- Note we serialize LedgerState 'l' before SnapShots 's' on purpose
 
 instance
   ( FromCBOR (Core.PParams era),
@@ -481,14 +510,14 @@ instance
   FromCBOR (EpochState era)
   where
   fromCBOR =
-    decode $
-      RecD EpochState
-        <! From
-        <! From
-        <! From
-        <! From
-        <! From
-        <! From
+    decodeRecordNamed "EpochState" (const 6) $ do
+      esAccountState <- fromCBOR
+      (esSnapshots, esLState) <-
+        evalStateT ((,) <$> fromSharedPlusCBOR <*> fromSharedPlusCBOR) mempty
+      esPrevPp <- fromCBOR
+      esPp <- fromCBOR
+      esNonMyopic <- fromCBOR
+      pure EpochState {esAccountState, esSnapshots, esLState, esPrevPp, esPp, esNonMyopic}
 
 data UpecState era = UpecState
   { -- | Current protocol parameters.
@@ -694,13 +723,16 @@ instance
     FromCBOR (Core.Value era),
     FromCBOR (State (Core.EraRule "PPUP" era))
   ) =>
-  FromCBOR (LedgerState era)
+  FromSharedCBOR (LedgerState era)
   where
-  fromCBOR =
-    decode $
-      RecD LedgerState
-        <! From
-        <! From
+  type
+    Share (LedgerState era) =
+      (Interns (Credential 'Staking (Crypto era)), Interns (KeyHash 'StakePool (Crypto era)))
+  fromSharedCBOR =
+    decodeRecordNamedT "LedgerState" (const 2) $ do
+      _utxoState <- lift fromCBOR
+      _delegationState <- fromSharedPlusCBOR
+      pure LedgerState {_utxoState, _delegationState}
 
 -- | Creates the ledger state for an empty ledger which
 --  contains the specified transaction outputs.
