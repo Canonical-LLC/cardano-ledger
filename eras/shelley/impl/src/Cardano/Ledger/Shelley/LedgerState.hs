@@ -239,7 +239,6 @@ import Data.Coders
   ( Decode (From, RecD),
     decode,
     decodeRecordNamed,
-    encodeMap,
     (<!),
   )
 import qualified Data.Compact.VMap as VMap
@@ -324,11 +323,11 @@ instance CC.Crypto crypto => ToCBOR (InstantaneousRewards crypto) where
     encodeListLen 4 <> mapToCBOR irR <> mapToCBOR irT <> toCBOR dR <> toCBOR dT
 
 instance CC.Crypto crypto => FromSharedCBOR (InstantaneousRewards crypto) where
-  type Share (InstantaneousRewards crypto) = (Interns (Credential 'Staking crypto), Interns Coin)
+  type Share (InstantaneousRewards crypto) = Interns (Credential 'Staking crypto)
   fromSharedCBOR = do
     decodeRecordNamedT "InstantaneousRewards" (const 4) $ do
-      irR <- fromSharedPlusCBOR
-      irT <- fromSharedPlusCBOR
+      irR <- fromSharedPlusLensCBOR (toMemptyLens _1 id)
+      irT <- fromSharedPlusLensCBOR (toMemptyLens _1 id)
       dR <- lift fromCBOR
       dT <- lift fromCBOR
       pure $ InstantaneousRewards irR irT dR dT
@@ -357,8 +356,8 @@ instance NFData (DState crypto)
 instance CC.Crypto crypto => ToCBOR (DState crypto) where
   toCBOR (DState rw dlg p fgs gs ir) =
     encodeListLen 6
-      <> encodeMap toCBOR toCBOR rw -- toCBOR rw
-      <> encodeMap toCBOR toCBOR dlg -- toCBOR dlg
+      <> toCBOR rw
+      <> toCBOR dlg
       <> toCBOR p
       <> toCBOR fgs
       <> toCBOR gs
@@ -375,7 +374,7 @@ instance CC.Crypto crypto => FromSharedCBOR (DState crypto) where
       p <- fromSharedPlusLensCBOR (toMemptyLens _2 _1)
       fgs <- lift fromCBOR
       gs <- lift fromCBOR
-      ir <- fromSharedPlusLensCBOR (toMemptyLens _1 _1)
+      ir <- fromSharedPlusLensCBOR _1
       pure $ DState rw dlg p fgs gs ir
 
 -- | Current state of staking pools and their certificate counters.
@@ -510,13 +509,13 @@ instance
   FromCBOR (EpochState era)
   where
   fromCBOR =
-    decodeRecordNamed "EpochState" (const 6) $ do
-      esAccountState <- fromCBOR
-      (esSnapshots, esLState) <-
-        evalStateT ((,) <$> fromSharedPlusCBOR <*> fromSharedPlusCBOR) mempty
-      esPrevPp <- fromCBOR
-      esPp <- fromCBOR
-      esNonMyopic <- fromCBOR
+    decodeRecordNamed "EpochState" (const 6) $ flip evalStateT mempty $ do
+      esAccountState <- lift fromCBOR
+      esLState <- fromSharedPlusCBOR
+      esSnapshots <- fromSharedPlusCBOR
+      esPrevPp <- lift fromCBOR
+      esPp <- lift fromCBOR
+      esNonMyopic <- fromSharedLensCBOR _2
       pure EpochState {esAccountState, esSnapshots, esLState, esPrevPp, esPp, esNonMyopic}
 
 data UpecState era = UpecState

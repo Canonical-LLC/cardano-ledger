@@ -179,6 +179,12 @@ prop_roundtrip_PrtclState = roundtrip toCBOR fromCBOR
 prop_roundtrip_LedgerState :: Ledger.LedgerState Mock.C -> Property
 prop_roundtrip_LedgerState = roundtrip toCBOR fromCBOR
 
+prop_roundtrip_SnapShots :: Ledger.SnapShots Mock.C_Crypto -> Property
+prop_roundtrip_SnapShots = roundtrip2 toCBOR fromNotSharedCBOR
+
+prop_roundtrip_EpochState :: Ledger.EpochState Mock.C -> Property
+prop_roundtrip_EpochState = roundtrip2 toCBOR fromCBOR
+
 prop_roundtrip_NewEpochState :: Ledger.NewEpochState Mock.C -> Property
 prop_roundtrip_NewEpochState = roundtrip2 toCBOR fromCBOR
 
@@ -263,6 +269,8 @@ tests =
         prop_roundtrip_LEDGER_PredicateFails,
       testProperty "roundtrip Protocol State" prop_roundtrip_PrtclState,
       testProperty "roundtrip Ledger State" prop_roundtrip_LedgerState,
+      testProperty "roundtrip SnapShots" prop_roundtrip_SnapShots,
+      testProperty "roundtrip Epoch State" prop_roundtrip_EpochState,
       testProperty "roundtrip NewEpoch State" prop_roundtrip_NewEpochState,
       testProperty "roundtrip MultiSig" prop_roundtrip_MultiSig,
       testProperty "roundtrip Metadata" prop_roundtrip_metadata,
