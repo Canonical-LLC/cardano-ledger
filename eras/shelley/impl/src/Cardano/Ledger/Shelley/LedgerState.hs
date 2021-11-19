@@ -509,14 +509,15 @@ instance
   FromCBOR (EpochState era)
   where
   fromCBOR =
-    decodeRecordNamed "EpochState" (const 6) $ flip evalStateT mempty $ do
-      esAccountState <- lift fromCBOR
-      esLState <- fromSharedPlusCBOR
-      esSnapshots <- fromSharedPlusCBOR
-      esPrevPp <- lift fromCBOR
-      esPp <- lift fromCBOR
-      esNonMyopic <- fromSharedLensCBOR _2
-      pure EpochState {esAccountState, esSnapshots, esLState, esPrevPp, esPp, esNonMyopic}
+    decodeRecordNamed "EpochState" (const 6) $
+      flip evalStateT mempty $ do
+        esAccountState <- lift fromCBOR
+        esLState <- fromSharedPlusCBOR
+        esSnapshots <- fromSharedPlusCBOR
+        esPrevPp <- lift fromCBOR
+        esPp <- lift fromCBOR
+        esNonMyopic <- fromSharedLensCBOR _2
+        pure EpochState {esAccountState, esSnapshots, esLState, esPrevPp, esPp, esNonMyopic}
 
 data UpecState era = UpecState
   { -- | Current protocol parameters.

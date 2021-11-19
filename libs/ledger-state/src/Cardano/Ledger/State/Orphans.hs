@@ -145,6 +145,9 @@ deriving via Enc (PoolParams C) instance PersistField (PoolParams C)
 
 deriving via Enc (PoolParams C) instance PersistFieldSql (PoolParams C)
 
+instance FromCBOR (NonMyopic C) where
+  fromCBOR = fromNotSharedCBOR
+
 deriving via Enc (NonMyopic C) instance PersistField (NonMyopic C)
 
 deriving via Enc (NonMyopic C) instance PersistFieldSql (NonMyopic C)
