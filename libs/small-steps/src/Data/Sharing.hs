@@ -17,7 +17,6 @@ module Data.Sharing
     Interns (..),
     Intern (..),
     fromSharedLensCBOR,
-    fromSharedPlusCBOR,
     fromSharedPlusLensCBOR,
     fromNotSharedCBOR,
     interns,
@@ -101,19 +100,28 @@ instance Semigroup (Interns a) where
         | otherwise = i : a : as
 
 class Monoid (Share a) => FromSharedCBOR a where
+  {-# MINIMAL ((getShare, fromSharedCBOR) | fromSharedPlusCBOR) #-}
   type Share a :: Type
   type Share a = ()
 
   getShare :: a -> Maybe (Share a)
   getShare _ = Nothing
 
+  -- | Utilize sharing when decoding, but do not add anything to the state for
+  -- future sharing.
   fromSharedCBOR :: StateT (Share a) (Decoder s) a
+  fromSharedCBOR = do
+    s <- get
+    x <- fromSharedPlusCBOR
+    x <$ put s
 
--- | Deserialize with sharing and add the state that used for sharing
-fromSharedPlusCBOR :: FromSharedCBOR a => StateT (Share a) (Decoder s) a
-fromSharedPlusCBOR = do
-  x <- fromSharedCBOR
-  x <$ mapM_ (\s -> modify' (s <>)) (getShare x)
+  -- | Deserialize with sharing and add the state that used for sharing. Default
+  -- implementation will add value returned by `getShare` for adding to the
+  -- state.
+  fromSharedPlusCBOR :: StateT (Share a) (Decoder s) a
+  fromSharedPlusCBOR = do
+    x <- fromSharedCBOR
+    x <$ mapM_ (\s -> modify' (s <>)) (getShare x)
 
 fromSharedLensCBOR ::
   FromSharedCBOR b =>

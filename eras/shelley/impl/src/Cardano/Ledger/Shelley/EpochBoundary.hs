@@ -209,7 +209,7 @@ instance CC.Crypto crypto => FromSharedCBOR (SnapShot crypto) where
   type
     Share (SnapShot crypto) =
       (Interns (Credential 'Staking crypto), Interns (KeyHash 'StakePool crypto))
-  fromSharedCBOR =
+  fromSharedPlusCBOR =
     decodeRecordNamedT "SnapShot" (const 3) $ do
       _stake <- fromSharedPlusLensCBOR _1
       _delegations <- fromSharedPlusCBOR
@@ -242,7 +242,7 @@ instance
 
 instance CC.Crypto crypto => FromSharedCBOR (SnapShots crypto) where
   type Share (SnapShots crypto) = Share (SnapShot crypto)
-  fromSharedCBOR =
+  fromSharedPlusCBOR =
     decodeRecordNamedT "SnapShots" (const 4) $
       SnapShots
         <$> fromSharedPlusCBOR

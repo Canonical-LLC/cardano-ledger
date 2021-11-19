@@ -324,7 +324,7 @@ instance CC.Crypto crypto => ToCBOR (InstantaneousRewards crypto) where
 
 instance CC.Crypto crypto => FromSharedCBOR (InstantaneousRewards crypto) where
   type Share (InstantaneousRewards crypto) = Interns (Credential 'Staking crypto)
-  fromSharedCBOR = do
+  fromSharedPlusCBOR = do
     decodeRecordNamedT "InstantaneousRewards" (const 4) $ do
       irR <- fromSharedPlusLensCBOR (toMemptyLens _1 id)
       irT <- fromSharedPlusLensCBOR (toMemptyLens _1 id)
@@ -367,7 +367,7 @@ instance CC.Crypto crypto => FromSharedCBOR (DState crypto) where
   type
     Share (DState crypto) =
       (Interns (Credential 'Staking crypto), Interns (KeyHash 'StakePool crypto))
-  fromSharedCBOR = do
+  fromSharedPlusCBOR = do
     decodeRecordNamedT "DState" (const 6) $ do
       rw <- fromSharedPlusLensCBOR (toMemptyLens _1 _1)
       dlg <- fromSharedPlusCBOR
@@ -400,7 +400,7 @@ instance CC.Crypto crypto => FromSharedCBOR (PState crypto) where
   type
     Share (PState crypto) =
       Interns (KeyHash 'StakePool crypto)
-  fromSharedCBOR =
+  fromSharedPlusCBOR =
     decodeRecordNamedT "PState" (const 3) $ do
       _pParams <- fromSharedPlusLensCBOR (toMemptyLens _1 id)
       _fPParams <- fromSharedPlusLensCBOR (toMemptyLens _1 id)
@@ -434,7 +434,7 @@ instance CC.Crypto crypto => FromSharedCBOR (DPState crypto) where
       ( Interns (Credential 'Staking crypto),
         Interns (KeyHash 'StakePool crypto)
       )
-  fromSharedCBOR =
+  fromSharedPlusCBOR =
     decodeRecordNamedT "DPState" (const 2) $ do
       _pstate <- fromSharedPlusLensCBOR _2
       _dstate <- fromSharedPlusCBOR
@@ -728,7 +728,7 @@ instance
   type
     Share (LedgerState era) =
       (Interns (Credential 'Staking (Crypto era)), Interns (KeyHash 'StakePool (Crypto era)))
-  fromSharedCBOR =
+  fromSharedPlusCBOR =
     decodeRecordNamedT "LedgerState" (const 2) $ do
       _utxoState <- lift fromCBOR
       _delegationState <- fromSharedPlusCBOR
