@@ -104,6 +104,9 @@ class Monoid (Share a) => FromSharedCBOR a where
   type Share a :: Type
   type Share a = ()
 
+  -- | In case when default implementation of `fromSharedPlusCBOR` is being used
+  -- in order to contribute to sharing produce the `Share` from the actual
+  -- value, which will be invoked after successfulll deserialization.
   getShare :: a -> Maybe (Share a)
   getShare _ = Nothing
 
@@ -123,6 +126,7 @@ class Monoid (Share a) => FromSharedCBOR a where
     x <- fromSharedCBOR
     x <$ mapM_ (\s -> modify' (s <>)) (getShare x)
 
+
 fromSharedLensCBOR ::
   FromSharedCBOR b =>
   SimpleGetter bs (Share b) ->
@@ -131,8 +135,25 @@ fromSharedLensCBOR l = do
   s <- get
   lift $ evalStateT fromSharedCBOR (s ^. l)
 
--- | Using this function it is possible to compose two lenses. One will
--- extract a value and another will used it for placing it into a empty monoid.
+-- | Using this function it is possible to compose two lenses. One will extract
+-- a value and another will used it for placing it into a empty monoid. Here is
+-- an example of how a second element of a tuple can be projected on the third
+-- element of a 3-tuple.
+--
+-- > toMemptyLens _3 _2 == lens (\(_, b) -> (mempty, mempty, b)) (\(a, _) (_, _, b) -> (a, b))
+--
+-- Here is an example where we extract a second element of a tuple and insert it at
+-- third position of a three tuple while all other elements are set to `mempty`:
+--
+-- >>> ("foo","bar") ^. toMemptyLens _3 _2 :: (Maybe String, (), String)
+-- (Nothing,(),"b")
+--
+-- In the opposite direction of extracting the third element of a 3-tuple and
+-- replacing the second element of the tuple the setter is being applied to
+--
+-- >>> ("foo","bar") & toMemptyLens _3 _2 .~ (Just "baz", (), "booyah") :: (String, String)
+-- ("foo","booyah")
+--
 toMemptyLens :: Monoid a => Lens' a b -> Lens' c b -> Lens' c a
 toMemptyLens lto lfrom =
   lens (\s -> mempty & lto .~ (s ^. lfrom)) (\s a -> s & lfrom .~ (a ^. lto))
