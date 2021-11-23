@@ -332,8 +332,8 @@ decodeMapByKey decodeKey decodeValueFor =
     <$> decodeMapContents decodeInlinedPair
   where
     decodeInlinedPair = do
-      key <- decodeKey
-      value <- decodeValueFor key
+      !key <- decodeKey
+      !value <- decodeValueFor key
       pure (key, value)
 
 decodeMapContents :: Decoder s a -> Decoder s [a]

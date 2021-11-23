@@ -46,7 +46,7 @@ import Lens.Micro
 data Intern a = Intern
   { internMaybe :: a -> Maybe a,
     -- | Used for sorting
-    internWeight :: Int
+    internWeight :: !Int
   }
 
 newtype Interns a = Interns [Intern a]
@@ -92,11 +92,11 @@ instance Semigroup (Interns a) where
   (<>) is1 (Interns []) = is1
   (<>) (Interns []) is2 = is2
   (<>) (Interns is1) (Interns is2) =
-    Interns (F.foldl' insertIntoSortedInterns is2 is1)
+    Interns (F.foldr insertIntoSortedInterns is2 is1)
     where
-      insertIntoSortedInterns [] i = [i]
-      insertIntoSortedInterns (a : as) i
-        | internWeight a > internWeight i = a : insertIntoSortedInterns as i
+      insertIntoSortedInterns i [] = [i]
+      insertIntoSortedInterns i (a : as)
+        | internWeight a > internWeight i = a : insertIntoSortedInterns i as
         | otherwise = i : a : as
 
 class Monoid (Share a) => FromSharedCBOR a where
@@ -178,21 +178,21 @@ instance (Ord k, FromCBOR k, FromCBOR v) => FromSharedCBOR (Map k v) where
   fromSharedCBOR = do
     (kis, vis) <- get
     lift $ decodeMap (interns kis <$> fromCBOR) (interns vis <$> fromCBOR)
-  getShare m = Just (internsFromMap m, mempty)
+  getShare !m = Just (internsFromMap m, mempty)
 
 instance (Ord k, FromCBOR k, FromCBOR v) => FromSharedCBOR (VMap VB VB k v) where
   type Share (VMap VB VB k v) = (Interns k, Interns v)
   fromSharedCBOR = do
     (kis, vis) <- get
     lift $ decodeVMap (interns kis <$> fromCBOR) (interns vis <$> fromCBOR)
-  getShare m = Just (internsFromVMap m, mempty)
+  getShare !m = Just (internsFromVMap m, mempty)
 
 instance (Ord k, FromCBOR k, FromCBOR v, Prim v) => FromSharedCBOR (VMap VB VP k v) where
   type Share (VMap VB VP k v) = Interns k
   fromSharedCBOR = do
     kis <- get
     lift $ decodeVMap (interns kis <$> fromCBOR) fromCBOR
-  getShare m = Just (internsFromVMap m)
+  getShare !m = Just (internsFromVMap m)
 
 -- ==============================================================================
 -- These BiMap instances are adapted from the FromCBOR instances in Data.Coders
