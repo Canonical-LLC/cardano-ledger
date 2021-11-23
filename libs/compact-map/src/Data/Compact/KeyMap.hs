@@ -586,6 +586,9 @@ getMax (Two _ _ y) = getMax y
 getMax (BitmapIndexed _ arr) = getMax (index arr (isize arr - 1))
 getMax (Full arr) = getMax (index arr (isize arr - 1))
 
+minViewWithKey :: KeyMap v -> Maybe ((Key, v), KeyMap v)
+minViewWithKey _x = Nothing
+
 -- ==================================================
 
 -- | The (key,value) pairs (i.e. a subset) of 'h1' where key is in the domain of both 'h1' and 'h2'

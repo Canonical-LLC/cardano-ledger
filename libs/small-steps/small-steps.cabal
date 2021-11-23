@@ -49,6 +49,7 @@ library
                      , Control.Provenance
                      , Control.Iterate.SetAlgebra
                      , Control.Iterate.Collect
+                     , Control.Iterate.SplitMap
                      , Control.SetAlgebra
   build-depends:       aeson
                      , ansi-wl-pprint

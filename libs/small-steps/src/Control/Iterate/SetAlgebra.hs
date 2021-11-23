@@ -28,6 +28,8 @@ import Control.DeepSeq (NFData (rnf))
 import Control.Iterate.Collect
 import Control.Monad (void)
 import Data.Coders (invalidKey)
+import Data.Compact.SplitMap (Split (..), SplitMap (..))
+import qualified Data.Compact.SplitMap as SplitMap
 import Data.List (sortBy)
 import qualified Data.List as List
 import Data.Map.Internal (Map (..), link, link2)
@@ -587,6 +589,7 @@ data BaseRep f k v where
   ListR :: Basic List => BaseRep List k v
   SingleR :: Basic Single => BaseRep Single k v
   BiMapR :: (Basic (BiMap v), Ord v) => BaseRep (BiMap v) k v
+  SplitR :: Split k => BaseRep SplitMap k v
 
 -- ==========================================================================
 -- The most basic operation of iteration, where (Iter f) is to use the 'nxt'
@@ -925,12 +928,13 @@ lift f = Fun (Lift f) f
 -- to be applied to a collection built by iterating over a Query. This produces the keys in
 -- ascending order, with no duplicate keys. So we do not need to specify how to merge values.
 -- =============================================================================================
-materialize :: (Ord k) => BaseRep f k v -> Collect (k, v) -> f k v
+materialize :: forall f k v. (Ord k) => BaseRep f k v -> Collect (k, v) -> f k v
 materialize ListR x = fromPairs (\l _r -> l) (runCollect x [] (:))
 materialize MapR x = runCollect x Map.empty (\(k, v) ans -> Map.insert k v ans)
 materialize SetR x = Sett (runCollect x Set.empty (\(k, _) ans -> Set.insert k ans))
 materialize BiMapR x = runCollect x biMapEmpty (\(k, v) ans -> addpair k v ans)
 materialize SingleR x = runCollect x Fail (\(k, v) _ignore -> Single k v)
+materialize SplitR x = runCollect x (SplitMap.empty @k) (\(k, v) ans -> SplitMap.insert k v ans)
 
 -- ================================================================================
 -- On the flip side, a witness can be used to specifiy how to build a datatype from
@@ -946,12 +950,13 @@ addp combine (k, v) xs = addkv (k, v) xs combine
 -- later in the list override ones earlier in the list, and comb =
 -- (\ earlier later -> earlier) will keep the value that appears first in the list
 
-fromList :: Ord k => BaseRep f k v -> (v -> v -> v) -> [(k, v)] -> f k v
+fromList :: forall f k v. Ord k => BaseRep f k v -> (v -> v -> v) -> [(k, v)] -> f k v
 fromList MapR combine xs = Map.fromListWith combine xs
 fromList ListR combine xs = fromPairs combine xs
 fromList SetR combine xs = foldr (addp combine) (Sett (Set.empty)) xs
 fromList BiMapR combine xs = biMapFromList combine xs
 fromList SingleR combine xs = foldr (addp combine) Fail xs
+fromList SplitR combine xs = foldr (\(k, v) a -> SplitMap.insertWith combine k v a) (SplitMap.empty @k) xs
 
 -- =========================================================================================
 -- Now we make an iterator that collects triples, on the intersection
@@ -1497,6 +1502,7 @@ instance Show (BaseRep f k v) where
   show ListR = "List"
   show SingleR = "Single"
   show BiMapR = "BiMap"
+  show SplitR = "SplitMap"
 
 instance Show (Exp t) where
   show (Base MapR x) = "Map(" ++ show (Map.size x) ++ ")?"
