@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Control.Iterate.SplitMap where
@@ -60,3 +62,13 @@ instance Basic SplitMap where
   range smap = SplitMap.foldlWithKey' accum Set.empty smap
     where
       accum ans _ v = Set.insert v ans
+
+instance (Ord k, Split k) => HasExp (SplitMap k v) (SplitMap k v) where
+  toExp x = Base SplitR x
+
+instance (Ord k, Split k) => HasQuery (SplitMap k v) k v where
+  query xs = BaseD SplitR xs
+
+instance Embed (SplitMap k v) (SplitMap k v) where
+  toBase xs = xs
+  fromBase xs = xs

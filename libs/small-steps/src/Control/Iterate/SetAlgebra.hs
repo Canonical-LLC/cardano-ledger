@@ -1112,6 +1112,7 @@ runSet e = run (compile e)
 run :: (Ord k) => (Query k v, BaseRep f k v) -> f k v
 run (BaseD SetR x, SetR) = x -- If it is already data (BaseD)
 run (BaseD MapR x, MapR) = x -- and in the right form (the BaseRep's match)
+run (BaseD SplitR x, SplitR) = x
 run (BaseD SingleR x, SingleR) = x -- just return the data
 run (BaseD BiMapR x, BiMapR) = x -- only need to materialize data
 run (BaseD ListR x, ListR) = x -- if the forms do not match.
@@ -1467,9 +1468,13 @@ guardQ ::
   Query k v
 guardQ x p = GuardD (query x) p
 
--- Don't know why this won't type check
--- diffQ :: (Ord k, HasQuery concrete1 k v, HasQuery concrete2 k u) => concrete1 -> concrete2 -> Query k v
--- diffQ = \ x y -> DiffD (query x) (query y)
+diffQ ::
+  forall k v u concrete1 concrete2.
+  (Ord k, HasQuery (concrete1 k v) k v, HasQuery (concrete2 k u) k u) =>
+  (concrete1 k v) ->
+  (concrete2 k u) ->
+  Query k v
+diffQ x y = DiffD (query x) (query @(concrete2 k u) @k @u y)
 
 class HasQuery concrete k v where
   query :: concrete -> Query k v
