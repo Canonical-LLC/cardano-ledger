@@ -82,6 +82,7 @@ library
     Cardano.Ledger.Shelley.Tx
     Cardano.Ledger.Shelley.TxBody
     Cardano.Ledger.Shelley.UTxO
+    Cardano.Ledger.Shelley.NewUTxO
   other-modules:      Cardano.Ledger.Shelley.API.Types
   hs-source-dirs: src
   build-depends:
