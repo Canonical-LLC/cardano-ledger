@@ -32,6 +32,7 @@ library
   exposed-modules:     Data.Compact.KeyMap
                      , Data.Compact.HashMap
                      , Data.Compact.VMap
+                     , Data.Compact.SplitMap
   other-modules:       Data.Compact.Class
                      , Data.Compact.KVVector
   build-depends:       base >=4.11 && <5
