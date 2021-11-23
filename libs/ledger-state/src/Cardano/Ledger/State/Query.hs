@@ -723,25 +723,25 @@ loadEpochStateEntity :: MonadUnliftIO m => T.Text -> m (Entity EpochState)
 loadEpochStateEntity fp = runSqlite fp (getJustEntity esId)
 
 getLedgerStateWithSharing ::
-     (MonadUnliftIO m, MonadResource m)
-  => Entity EpochState
-  -> ReaderT SqlBackend m (Shelley.LedgerState CurrentEra)
+  (MonadUnliftIO m, MonadResource m) =>
+  Entity EpochState ->
+  ReaderT SqlBackend m (Shelley.LedgerState CurrentEra)
 getLedgerStateWithSharing ese = do
   ledgerState@LedgerState {..} <-
-    maybe (error "Impossible") (pure . entityVal) =<<
-    selectFirst [LedgerStateEpochStateId ==. entityKey ese] []
+    maybe (error "Impossible") (pure . entityVal)
+      =<< selectFirst [LedgerStateEpochStateId ==. entityKey ese] []
   dstate <- getDStateWithSharing ledgerStateDstateId
   m <- runConduitFold sourceUTxO noSharing
   getLedgerState (Shelley.UTxO m) ledgerState dstate
 
 getLedgerStateNoSharing ::
-     (MonadUnliftIO m, MonadResource m)
-  => Entity EpochState
-  -> ReaderT SqlBackend m (Shelley.LedgerState CurrentEra)
+  (MonadUnliftIO m, MonadResource m) =>
+  Entity EpochState ->
+  ReaderT SqlBackend m (Shelley.LedgerState CurrentEra)
 getLedgerStateNoSharing ese = do
   ledgerState@LedgerState {..} <-
-    maybe (error "Impossible") (pure . entityVal) =<<
-    selectFirst [LedgerStateEpochStateId ==. entityKey ese] []
+    maybe (error "Impossible") (pure . entityVal)
+      =<< selectFirst [LedgerStateEpochStateId ==. entityKey ese] []
   dstate <- getDStateNoSharing ledgerStateDstateId
   m <- runConduitFold sourceUTxO noSharing
   getLedgerState (Shelley.UTxO m) ledgerState dstate
@@ -764,24 +764,25 @@ loadEpochState fp = runSqlite fp $ do
         esPp = epochStatePp,
         esNonMyopic = epochStateNonMyopic
       }
--- loadEpochState :: MonadUnliftIO m => T.Text -> m (Shelley.EpochState CurrentEra)
--- loadEpochState fp = runSqlite fp $ do
---   ese@(Entity _ EpochState {..}) <- getJustEntity esId
---   snapshots <- getSnapShotsWithSharing ese
---   ledgerState <- getLedgerStateWithSharing ese
---   pure
---     Shelley.EpochState
---       { esAccountState =
---           Shelley.AccountState
---             { _treasury = epochStateTreasury,
---               _reserves = epochStateReserves
---             },
---         esLState = ledgerState,
---         esSnapshots = snapshots,
---         esPrevPp = epochStatePrevPp,
---         esPp = epochStatePp,
---         esNonMyopic = epochStateNonMyopic
---       }
+
+loadEpochStateWithSharing :: MonadUnliftIO m => T.Text -> m (Shelley.EpochState CurrentEra)
+loadEpochStateWithSharing fp = runSqlite fp $ do
+  ese@(Entity _ EpochState {..}) <- getJustEntity esId
+  snapshots <- getSnapShotsWithSharing ese
+  ledgerState <- getLedgerStateWithSharing ese
+  pure
+    Shelley.EpochState
+      { esAccountState =
+          Shelley.AccountState
+            { _treasury = epochStateTreasury,
+              _reserves = epochStateReserves
+            },
+        esLState = ledgerState,
+        esSnapshots = snapshots,
+        esPrevPp = epochStatePrevPp,
+        esPp = epochStatePp,
+        esNonMyopic = epochStateNonMyopic
+      }
 
 loadSnapShotsNoSharing ::
   MonadUnliftIO m => T.Text -> Entity EpochState -> m (EpochBoundary.SnapShots C)

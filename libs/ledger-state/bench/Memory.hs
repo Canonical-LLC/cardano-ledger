@@ -59,7 +59,6 @@ main = do
         )
         (header "ledger-state:memory - Tool for analyzing memory consumption of ledger state")
   let cols = [Case, Max, MaxOS, Live, Allocated, GCs, WallTime]
-  !mEpochStateEntity <- mapM (loadEpochStateEntity . T.pack) (optsSqliteDbFile opts)
   mainWith $ do
     setColumns cols
     -- forM_ (optsNewEpochStateBinaryFile opts) $ \binFp -> do
@@ -68,7 +67,8 @@ main = do
       io "EpochState (FromCBOR)" readEpochState binFp
     forM_ (optsSqliteDbFile opts) $ \dbFpStr -> do
       let dbFp = T.pack dbFpStr
-      io "EpochState (Sqlite)" loadEpochState dbFp
+      io "EpochState (with-sharing)" loadEpochStateWithSharing dbFp
+      io "EpochState (no-sharing)" loadEpochState dbFp
       -- forM_ mEpochStateEntity $ \_ese ->
       --   -- wgroup "EpochState" $ do
       --   --   io "SnapShots - no sharing" (loadSnapShotsNoSharingM dbFp) _ese

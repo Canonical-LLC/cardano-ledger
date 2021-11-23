@@ -422,11 +422,10 @@ instance
   CC.Crypto crypto =>
   ToCBOR (DPState crypto)
   where
-  toCBOR (DPState ds ps) =
-    encodeListLen 2 <> toCBOR ps <> toCBOR ds
-
--- We serialize the fields of DPState out of order, so we must deserialize them in this order as well.
--- We do this to get better Sharing
+  toCBOR DPState {_pstate, _dstate} =
+    encodeListLen 2
+      <> toCBOR _pstate -- We get better sharing when encoding pstate before dstate
+      <> toCBOR _dstate
 
 instance CC.Crypto crypto => FromSharedCBOR (DPState crypto) where
   type
@@ -438,10 +437,7 @@ instance CC.Crypto crypto => FromSharedCBOR (DPState crypto) where
     decodeRecordNamedT "DPState" (const 2) $ do
       _pstate <- fromSharedPlusLensCBOR _2
       _dstate <- fromSharedPlusCBOR
-      pure DPState {_dstate, _pstate}
-
--- We deserialize the fields of DPState out of order, because we serialized them in this backwards order.
--- We do this to get better Sharing
+      pure DPState {_pstate, _dstate}
 
 data AccountState = AccountState
   { _treasury :: !Coin,
@@ -493,10 +489,14 @@ instance (Era era, TransEpoch NoThunks era) => NoThunks (EpochState era)
 instance (Era era, TransEpoch NFData era) => NFData (EpochState era)
 
 instance (TransEpoch ToCBOR era) => ToCBOR (EpochState era) where
-  toCBOR (EpochState a s l r p n) =
-    encodeListLen 6 <> toCBOR a <> toCBOR l <> toCBOR s <> toCBOR r <> toCBOR p <> toCBOR n
-
--- Note we serialize LedgerState 'l' before SnapShots 's' on purpose
+  toCBOR EpochState {esAccountState, esLState, esSnapshots, esPrevPp, esPp, esNonMyopic} =
+    encodeListLen 6
+      <> toCBOR esAccountState
+      <> toCBOR esLState -- We get better sharing when encoding ledger state before snaphots
+      <> toCBOR esSnapshots
+      <> toCBOR esPrevPp
+      <> toCBOR esPp
+      <> toCBOR esNonMyopic
 
 instance
   ( FromCBOR (Core.PParams era),
