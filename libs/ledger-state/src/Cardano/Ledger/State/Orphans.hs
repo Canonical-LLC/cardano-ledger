@@ -21,7 +21,6 @@ import Cardano.Ledger.Shelley.Rewards
 import Cardano.Ledger.Shelley.TxBody (PoolParams (..))
 import Cardano.Ledger.State.UTxO
 import Cardano.Ledger.TxIn
-import Control.DeepSeq
 import Data.ByteString.Short
 import Data.Sharing (fromNotSharedCBOR)
 import qualified Data.Text as T
@@ -81,11 +80,6 @@ instance PersistField DeltaCoin where
 
 instance PersistFieldSql DeltaCoin where
   sqlType _ = SqlInt64
-
-instance NFData (TxOut CurrentEra) where
-  rnf = \case
-    TxOutCompact _ _ -> ()
-    TxOutCompactDH _ _ _ -> ()
 
 newtype Enc a = Enc {unEnc :: a}
 

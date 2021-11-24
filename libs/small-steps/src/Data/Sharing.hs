@@ -64,7 +64,7 @@ interns (Interns is) !k = go is
 {-# INLINE interns #-}
 
 internsFromMap :: Ord k => Map k a -> Interns k
-internsFromMap !m =
+internsFromMap m =
   Interns
     [ Intern
         { internMaybe = \k ->
@@ -80,7 +80,7 @@ internsFromMap !m =
     ]
 
 internsFromVMap :: Ord k => VMap VB kv k a -> Interns k
-internsFromVMap !m =
+internsFromVMap m =
   Interns
     [ Intern
         { internMaybe = \k -> VMap.internMaybe k m,
@@ -180,13 +180,13 @@ instance (Ord k, FromCBOR k, FromCBOR v) => FromSharedCBOR (VMap VB VB k v) wher
   type Share (VMap VB VB k v) = (Interns k, Interns v)
   fromSharedCBOR (kis, vis) = do
     decodeVMap (interns kis <$> fromCBOR) (interns vis <$> fromCBOR)
-  getShare m = (internsFromVMap m, mempty)
+  getShare !m = (internsFromVMap m, mempty)
 
 instance (Ord k, FromCBOR k, FromCBOR v, Prim v) => FromSharedCBOR (VMap VB VP k v) where
   type Share (VMap VB VP k v) = Interns k
   fromSharedCBOR kis = do
     decodeVMap (interns kis <$> fromCBOR) fromCBOR
-  getShare = internsFromVMap
+  getShare !m = internsFromVMap m
 
 -- ==============================================================================
 -- These BiMap instances are adapted from the FromCBOR instances in Data.Coders

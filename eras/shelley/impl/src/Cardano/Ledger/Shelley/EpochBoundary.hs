@@ -218,7 +218,7 @@ instance CC.Crypto crypto => FromSharedCBOR (SnapShot crypto) where
 
 -- | Snapshots of the stake distribution.
 data SnapShots crypto = SnapShots
-  { _pstakeMark :: SnapShot crypto,
+  { _pstakeMark :: SnapShot crypto, -- Lazy on purpose
     _pstakeSet :: !(SnapShot crypto),
     _pstakeGo :: !(SnapShot crypto),
     _feeSS :: !Coin
@@ -233,22 +233,22 @@ instance
   CC.Crypto crypto =>
   ToCBOR (SnapShots crypto)
   where
-  toCBOR (SnapShots mark set go fs) =
+  toCBOR (SnapShots {_pstakeMark, _pstakeSet, _pstakeGo, _feeSS}) =
     encodeListLen 4
-      <> toCBOR mark
-      <> toCBOR set
-      <> toCBOR go
-      <> toCBOR fs
+      <> toCBOR _pstakeMark
+      <> toCBOR _pstakeSet
+      <> toCBOR _pstakeGo
+      <> toCBOR _feeSS
 
 instance CC.Crypto crypto => FromSharedCBOR (SnapShots crypto) where
   type Share (SnapShots crypto) = Share (SnapShot crypto)
   fromSharedPlusCBOR =
-    decodeRecordNamedT "SnapShots" (const 4) $
-      SnapShots
-        <$> fromSharedPlusCBOR
-        <*> fromSharedPlusCBOR
-        <*> fromSharedPlusCBOR
-        <*> lift fromCBOR
+    decodeRecordNamedT "SnapShots" (const 4) $ do
+      !_pstakeMark <- fromSharedPlusCBOR
+      _pstakeSet <- fromSharedPlusCBOR
+      _pstakeGo <- fromSharedPlusCBOR
+      _feeSS <- lift fromCBOR
+      pure SnapShots {_pstakeMark, _pstakeSet, _pstakeGo, _feeSS}
 
 instance Default (SnapShots crypto) where
   def = emptySnapShots

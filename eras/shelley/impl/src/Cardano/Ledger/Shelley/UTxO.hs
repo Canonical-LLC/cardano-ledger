@@ -94,6 +94,7 @@ import Control.Iterate.SetAlgebra
     eval,
     (◁),
   )
+import Control.Monad ((<$!>))
 import Data.Coders (decodeMap)
 import Data.Coerce (coerce)
 import Data.Constraint (Constraint)
@@ -160,7 +161,7 @@ instance
     Share (UTxO era) =
       Interns (Credential 'Staking (Crypto era))
   fromSharedCBOR credsInterns =
-    UTxO <$> decodeMap fromCBOR (fromSharedCBOR credsInterns)
+    UTxO <$!> decodeMap fromCBOR (fromSharedCBOR credsInterns)
 
 deriving via
   Quiet (UTxO era)

@@ -113,6 +113,7 @@ import Cardano.Ledger.Val
     encodeMint,
     isZero,
   )
+import Control.DeepSeq (NFData (..), rwhnf)
 import Control.Monad (guard)
 import Data.Bits
 import Data.Coders
@@ -164,6 +165,10 @@ deriving stock instance
     Compactible (Core.Value era)
   ) =>
   Eq (TxOut era)
+
+-- | Already in NF
+instance NFData (TxOut era) where
+  rnf = rwhnf
 
 getAdaOnly ::
   forall era.
