@@ -57,7 +57,7 @@ import Cardano.Ledger.Keys
     Hash,
     KeyHash (..),
     KeyPair (..),
-    KeyRole (StakePool, Witness),
+    KeyRole (..),
     asWitness,
     signedDSIGN,
     verifySignedDSIGN,
@@ -94,6 +94,7 @@ import Control.Iterate.SetAlgebra
     eval,
     (◁),
   )
+import Data.Coders (decodeMap)
 import Data.Coerce (coerce)
 import Data.Constraint (Constraint)
 import Data.Foldable (toList)
@@ -104,6 +105,7 @@ import qualified Data.Maybe as Maybe
 import Data.Sequence.Strict (StrictSeq)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Sharing
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 import GHC.Records (HasField (..))
@@ -144,8 +146,21 @@ deriving newtype instance
   ToCBOR (UTxO era)
 
 deriving newtype instance
-  (FromCBOR (Core.TxOut era), Era era) =>
+  (Era era, FromCBOR (Core.TxOut era)) =>
   FromCBOR (UTxO era)
+
+instance
+  ( CC.Crypto (Crypto era),
+    FromSharedCBOR (Core.TxOut era),
+    Share (Core.TxOut era) ~ Interns (Credential 'Staking (Crypto era))
+  ) =>
+  FromSharedCBOR (UTxO era)
+  where
+  type
+    Share (UTxO era) =
+      Interns (Credential 'Staking (Crypto era))
+  fromSharedCBOR credsInterns =
+    UTxO <$> decodeMap fromCBOR (fromSharedCBOR credsInterns)
 
 deriving via
   Quiet (UTxO era)

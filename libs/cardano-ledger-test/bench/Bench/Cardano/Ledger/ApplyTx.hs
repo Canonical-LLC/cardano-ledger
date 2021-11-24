@@ -31,7 +31,7 @@ import Cardano.Ledger.Shelley.API
     Tx,
     applyTxsTransition,
   )
-import Cardano.Ledger.Shelley.LedgerState (DPState)
+import Cardano.Ledger.Shelley.LedgerState (DPState, UTxOState)
 import Cardano.Ledger.Slot (SlotNo (SlotNo))
 import Control.DeepSeq (NFData (..))
 import Criterion
@@ -176,6 +176,15 @@ applyTxBenchmarks =
           deserialiseTxEra (Proxy @AlonzoBench)
         ]
     ]
+
+instance FromCBOR (UTxOState ShelleyBench) where
+  fromCBOR = fromNotSharedCBOR
+instance FromCBOR (UTxOState AllegraBench) where
+  fromCBOR = fromNotSharedCBOR
+instance FromCBOR (UTxOState MaryBench) where
+  fromCBOR = fromNotSharedCBOR
+instance FromCBOR (UTxOState AlonzoBench) where
+  fromCBOR = fromNotSharedCBOR
 
 instance FromCBOR (DPState C_Crypto) where
   fromCBOR = fromNotSharedCBOR

@@ -502,7 +502,8 @@ instance
   ( FromCBOR (Core.PParams era),
     TransValue FromCBOR era,
     HashAnnotated (Core.TxBody era) EraIndependentTxBody (Crypto era),
-    FromCBOR (Core.TxOut era),
+    FromSharedCBOR (Core.TxOut era),
+    Share (Core.TxOut era) ~ Interns (Credential 'Staking (Crypto era)),
     FromCBOR (State (Core.EraRule "PPUP" era)),
     Era era
   ) =>
@@ -605,18 +606,22 @@ instance TransUTxOState ToCBOR era => ToCBOR (UTxOState era) where
 instance
   ( TransValue FromCBOR era,
     FromCBOR (State (Core.EraRule "PPUP" era)),
-    FromCBOR (Core.TxOut era),
+    FromSharedCBOR (Core.TxOut era),
+    Share (Core.TxOut era) ~ Interns (Credential 'Staking (Crypto era)),
     HashAnnotated (Core.TxBody era) EraIndependentTxBody (Crypto era)
   ) =>
-  FromCBOR (UTxOState era)
+  FromSharedCBOR (UTxOState era)
   where
-  fromCBOR =
-    decode $
-      RecD UTxOState
-        <! From
-        <! From
-        <! From
-        <! From
+  type
+    Share (UTxOState era) =
+      Interns (Credential 'Staking (Crypto era))
+  fromSharedCBOR credInterns =
+    decodeRecordNamed "UTxOState" (const 4) $ do
+      _utxo <- fromSharedCBOR credInterns
+      _deposited <- fromCBOR
+      _fees <- fromCBOR
+      _ppups <- fromCBOR
+      pure UTxOState {_utxo, _deposited, _fees, _ppups}
 
 -- | New Epoch state and environment
 data NewEpochState era = NewEpochState
@@ -661,7 +666,8 @@ instance
 instance
   ( Era era,
     FromCBOR (Core.PParams era),
-    FromCBOR (Core.TxOut era),
+    FromSharedCBOR (Core.TxOut era),
+    Share (Core.TxOut era) ~ Interns (Credential 'Staking (Crypto era)),
     FromCBOR (Core.Value era),
     FromCBOR (State (Core.EraRule "PPUP" era))
   ) =>
@@ -713,14 +719,17 @@ instance
   (Era era, TransLedgerState ToCBOR era) =>
   ToCBOR (LedgerState era)
   where
-  toCBOR (LedgerState u dp) =
-    encodeListLen 2 <> toCBOR u <> toCBOR dp
+  toCBOR LedgerState {_utxoState, _delegationState} =
+    encodeListLen 2
+      <> toCBOR _delegationState -- encode delegation state first to improve sharing
+      <> toCBOR _utxoState
 
 instance
   ( Era era,
     HashAnnotated (Core.TxBody era) EraIndependentTxBody (Crypto era),
-    FromCBOR (Core.TxOut era),
     FromCBOR (Core.Value era),
+    FromSharedCBOR (Core.TxOut era),
+    Share (Core.TxOut era) ~ Interns (Credential 'Staking (Crypto era)),
     FromCBOR (State (Core.EraRule "PPUP" era))
   ) =>
   FromSharedCBOR (LedgerState era)
@@ -730,8 +739,8 @@ instance
       (Interns (Credential 'Staking (Crypto era)), Interns (KeyHash 'StakePool (Crypto era)))
   fromSharedPlusCBOR =
     decodeRecordNamedT "LedgerState" (const 2) $ do
-      _utxoState <- lift fromCBOR
       _delegationState <- fromSharedPlusCBOR
+      _utxoState <- fromSharedLensCBOR _1
       pure LedgerState {_utxoState, _delegationState}
 
 -- | Creates the ledger state for an empty ledger which

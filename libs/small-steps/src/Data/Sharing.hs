@@ -100,14 +100,13 @@ instance Semigroup (Interns a) where
         | otherwise = i : a : as
 
 class Monoid (Share a) => FromSharedCBOR a where
-  {-# MINIMAL ((fromSharedCBOR, getShare) | fromSharedPlusCBOR) #-}
+  {-# MINIMAL (fromSharedCBOR | fromSharedPlusCBOR) #-}
   type Share a :: Type
   type Share a = ()
 
   -- | Whenever `fromShareCBOR` is being used for defining the instance this
   -- function should return the state that can be added whenever user invokes
-  -- `fromSharedPlusCBOR`. It is required unless `fromSHaredPlusCBOR` is also
-  -- defined, in which case this function returns `mempty` by default.
+  -- `fromSharedPlusCBOR`. `mempty` is returned by default.
   getShare :: a -> Share a
   getShare _ = mempty
 
