@@ -87,7 +87,7 @@ deriving newtype instance
 instance CC.Crypto crypto => FromSharedCBOR (Stake crypto) where
   type Share (Stake crypto) = Share (VMap VB VP (Credential 'Staking crypto) (CompactForm Coin))
   getShare = getShare . unStake
-  fromSharedCBOR = Stake <$> fromSharedCBOR
+  fromSharedCBOR = fmap Stake . fromSharedCBOR
 
 sumAllStake :: Stake crypto -> Coin
 sumAllStake = VMap.foldMap fromCompact . unStake
