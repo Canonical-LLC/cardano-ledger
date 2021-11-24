@@ -142,6 +142,7 @@ fromSharedLensCBOR l = do
 -- Here is an example where we extract a second element of a tuple and insert it at
 -- third position of a three tuple while all other elements are set to `mempty`:
 --
+-- >>> import Lens.Micro
 -- >>> ("foo","bar") ^. toMemptyLens _3 _2 :: (Maybe String, (), String)
 -- (Nothing,(),"b")
 --
