@@ -144,7 +144,7 @@ fromSharedLensCBOR l = do
 --
 -- >>> import Lens.Micro
 -- >>> ("foo","bar") ^. toMemptyLens _3 _2 :: (Maybe String, (), String)
--- (Nothing,(),"b")
+-- (Nothing,(),"bar")
 --
 -- In the opposite direction of extracting the third element of a 3-tuple and
 -- replacing the second element of the tuple the setter is being applied to
