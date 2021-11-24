@@ -179,10 +179,13 @@ applyTxBenchmarks =
 
 instance FromCBOR (UTxOState ShelleyBench) where
   fromCBOR = fromNotSharedCBOR
+
 instance FromCBOR (UTxOState AllegraBench) where
   fromCBOR = fromNotSharedCBOR
+
 instance FromCBOR (UTxOState MaryBench) where
   fromCBOR = fromNotSharedCBOR
+
 instance FromCBOR (UTxOState AlonzoBench) where
   fromCBOR = fromNotSharedCBOR
 

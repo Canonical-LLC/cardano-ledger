@@ -124,7 +124,6 @@ class Monoid (Share a) => FromSharedCBOR a where
     x <- lift $ fromSharedCBOR s
     x <$ put (getShare x <> s)
 
-
 fromSharedLensCBOR ::
   FromSharedCBOR b =>
   SimpleGetter bs (Share b) ->
@@ -151,7 +150,6 @@ fromSharedLensCBOR l = do
 --
 -- >>> ("foo","bar") & toMemptyLens _3 _2 .~ (Just "baz", (), "booyah") :: (String, String)
 -- ("foo","booyah")
---
 toMemptyLens :: Monoid a => Lens' a b -> Lens' c b -> Lens' c a
 toMemptyLens lto lfrom =
   lens (\s -> mempty & lto .~ (s ^. lfrom)) (\s a -> s & lfrom .~ (a ^. lto))

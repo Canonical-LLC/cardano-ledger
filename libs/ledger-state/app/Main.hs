@@ -81,8 +81,9 @@ main = do
       epochState <- loadEpochState dbFp
       putStrLn "Written EpochState into the database"
       writeEpochState binFp epochState
-  -- forM_ (optsSqliteDbFile opts) $ \dbFpStr -> do
-  --   let dbFp = T.pack dbFpStr
-  --   km <- loadDbUTxO txIdSharingKeyMap dbFp
-  --   m <- loadDbUTxO noSharing dbFp
-  --   testKeyMap km m
+
+-- forM_ (optsSqliteDbFile opts) $ \dbFpStr -> do
+--   let dbFp = T.pack dbFpStr
+--   km <- loadDbUTxO txIdSharingKeyMap dbFp
+--   m <- loadDbUTxO noSharing dbFp
+--   testKeyMap km m
