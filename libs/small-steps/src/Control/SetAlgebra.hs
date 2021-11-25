@@ -64,6 +64,42 @@ module Control.SetAlgebra
   )
 where
 
+import Control.Iterate.BaseTypes (BaseRep (..), Basic (..), Embed (..), Iter (..), List, Single (..))
+import Control.Iterate.BiMap (BiMap (..), Bimap, biMapEmpty, biMapFromList)
+import Control.Iterate.Exp
+  ( Exp (..),
+    HasExp (..),
+    dexclude,
+    dom,
+    drestrict,
+    intersect,
+    keyeq,
+    materialize,
+    rexclude,
+    rng,
+    rrestrict,
+    setSingleton,
+    singleton,
+    subset,
+    unionleft,
+    unionplus,
+    unionright,
+    (<|),
+    (|>),
+    (∈),
+    (∉),
+    (∩),
+    (∪),
+    (∪+),
+    (≍),
+    (⊆),
+    (⋪),
+    (⋫),
+    (▷),
+    (◁),
+    (➖),
+    (⨃),
+  )
 import Control.Iterate.SetAlgebra
 import Data.Map (Map)
 import Data.Set (Set)

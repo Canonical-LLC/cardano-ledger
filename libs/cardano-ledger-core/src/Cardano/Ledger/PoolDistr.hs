@@ -28,12 +28,8 @@ import qualified Cardano.Ledger.Crypto as CC
 import Cardano.Ledger.Keys (Hash, KeyHash, KeyRole (..), VerKeyVRF)
 import Cardano.Ledger.Serialization (decodeRecordNamed)
 import Control.DeepSeq (NFData)
-import Control.Iterate.SetAlgebra
-  ( BaseRep (MapR),
-    Embed (..),
-    Exp (Base),
-    HasExp (toExp),
-  )
+import Control.Iterate.BaseTypes (BaseRep (MapR), Embed (..))
+import Control.Iterate.Exp (Exp (Base), HasExp (toExp))
 import Data.Map.Strict (Map)
 import Data.Relation (Relation (..))
 import GHC.Generics (Generic)

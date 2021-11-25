@@ -83,14 +83,9 @@ import Cardano.Ledger.TxIn (TxIn (..))
 import qualified Cardano.Ledger.TxIn as Core (txid)
 import Cardano.Ledger.Val (zero, (<+>), (<×>))
 import Control.DeepSeq (NFData)
-import Control.Iterate.SetAlgebra
-  ( BaseRep (MapR),
-    Embed (..),
-    Exp (Base),
-    HasExp (toExp),
-    eval,
-    (◁),
-  )
+import Control.Iterate.BaseTypes (BaseRep (MapR), Embed (..))
+import Control.Iterate.Exp (Exp (Base), HasExp (toExp), (◁))
+import Control.Iterate.SetAlgebra (eval)
 import Data.Coerce (coerce)
 import Data.Constraint (Constraint)
 import Data.Foldable (toList)
