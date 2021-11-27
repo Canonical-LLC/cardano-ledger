@@ -47,6 +47,7 @@ import Data.Text (Text)
 import GHC.Records (HasField (..))
 import qualified Plutus.V1.Ledger.Api as PV1
 import qualified Plutus.V2.Ledger.Api as PV2
+import Debug.Pretty.Simple
 
 -- | Basic validtion failures that can be returned by 'evaluateTransactionExecutionUnits'.
 data BasicFailure c
@@ -133,7 +134,7 @@ evaluateTransactionExecutionUnits pp tx utxo ei sysS costModels = do
     Nothing -> do
       let getInfo lang = (,) lang <$> txInfo pp lang ei sysS utxo tx
       txInfos <- array (PlutusV1, PlutusV2) <$> mapM getInfo (Set.toList nonNativeLanguages)
-      pure . Right $ Map.mapWithKey (findAndCount pp txInfos) (unRedeemers $ getField @"txrdmrs" ws)
+      pure . Right $ Map.mapWithKey (findAndCount pp (pTraceShow txInfos txInfos)) (unRedeemers $ getField @"txrdmrs" ws)
     Just e -> pure . Left $ e
   where
     txb = getField @"body" tx

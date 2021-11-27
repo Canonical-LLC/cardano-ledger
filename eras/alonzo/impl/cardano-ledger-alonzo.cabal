@@ -78,6 +78,7 @@ library
     plutus-tx,
     plutus-core,
     prettyprinter,
+    pretty-simple,
     serialise,
     set-algebra,
     cardano-ledger-shelley,
