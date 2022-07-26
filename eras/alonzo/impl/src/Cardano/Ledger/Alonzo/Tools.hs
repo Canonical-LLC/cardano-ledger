@@ -52,6 +52,7 @@ import Data.Text (Text)
 import GHC.Records (HasField (..))
 import qualified Plutus.V1.Ledger.Api as PV1
 import qualified Plutus.V2.Ledger.Api as PV2
+import Debug.Pretty.Simple
 
 -- | Script failures that can be returned by 'evaluateTransactionExecutionUnits'.
 data TransactionScriptFailure c
@@ -129,7 +130,7 @@ evaluateTransactionExecutionUnits pp tx utxo ei sysS costModels = do
   ctx <- sequence $ Map.fromSet getInfo languagesUsed
   pure $
     Map.mapWithKey
-      (findAndCount pp ctx)
+      (findAndCount pp (pTraceShow ctx ctx))
       (unRedeemers $ getField @"txrdmrs" ws)
   where
     txb = getField @"body" tx
