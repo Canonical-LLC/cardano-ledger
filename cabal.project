@@ -77,7 +77,7 @@ source-repository-package
 source-repository-package
   type: git
   location: https://github.com/Canonical-LLC/plutus
-  tag: eb41453efc48a7926bebabe978306de923917dee
+  tag: eae625d4969ac9d16fdaa49fe5a485dc3aaa5466
   --sha256: 180jq8hd0jlg48ya7b5yw3bnd2d5czy0b1agy9ng3mgnzpyq747i
   subdir:
     plutus-ledger-api
